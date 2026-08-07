@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,6 +58,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -66,6 +68,7 @@ import com.example.data.local.BotEntity
 import com.example.data.local.MessageEntity
 import com.example.data.local.UserSettingsEntity
 import com.example.data.repository.KeyCharacter
+import com.example.ui.components.BotQuickProfileSheet
 import com.example.ui.components.BotSettingsModal
 import com.example.ui.components.MoodColors
 import com.example.ui.components.OrbView
@@ -104,16 +107,20 @@ fun ChatScreen(
 ) {
     var inputText by remember { mutableStateOf("") }
     var showBotSettings by remember { mutableStateOf(false) }
+    var showQuickProfile by remember { mutableStateOf(false) }
 
     var editingMessageId by remember { mutableStateOf<String?>(null) }
     var editingText by remember { mutableStateOf("") }
 
     val listState = rememberLazyListState()
 
-    // Scroll to bottom on new messages
-    LaunchedEffect(messages.size, isSending) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
+    // Scroll to bottom on new messages, last message change, or typing state
+    val lastMsgId = messages.lastOrNull()?.id
+    val lastMsgLength = messages.lastOrNull()?.text?.length ?: 0
+    LaunchedEffect(messages.size, lastMsgId, lastMsgLength, isSending) {
+        val totalItems = messages.size + if (isSending) 1 else 0
+        if (totalItems > 0) {
+            listState.animateScrollToItem(totalItems - 1)
         }
     }
 
@@ -147,6 +154,7 @@ fun ChatScreen(
 
     Scaffold(
         containerColor = EmochiBackground,
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
         topBar = {
             Column(
                 modifier = Modifier
@@ -165,7 +173,10 @@ fun ChatScreen(
                     }
 
                     Row(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { showQuickProfile = true },
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -296,6 +307,27 @@ fun ChatScreen(
                         .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    IconButton(
+                        onClick = {
+                            val trimmed = inputText.trim()
+                            if (trimmed.isBlank()) {
+                                inputText = "*...*"
+                            } else if (trimmed.startsWith("*") && trimmed.endsWith("*") && trimmed.length >= 2) {
+                                inputText = trimmed.substring(1, trimmed.length - 1)
+                            } else {
+                                inputText = "*$trimmed*"
+                            }
+                        },
+                        modifier = Modifier
+                            .padding(end = 6.dp)
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(EmochiCard)
+                            .border(1.dp, EmochiBorder, CircleShape)
+                    ) {
+                        Text("*RP*", color = EmochiPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+
                     OutlinedTextField(
                         value = inputText,
                         onValueChange = { inputText = it },
@@ -342,14 +374,15 @@ fun ChatScreen(
                 .padding(innerPadding)
         ) {
             errorMessage?.let { err ->
-                Box(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Color(0xFF3A1414))
-                        .padding(8.dp),
-                    contentAlignment = Alignment.Center
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(err, color = EmochiError, fontSize = 12.sp)
+                    Text(err, color = EmochiError, fontSize = 12.sp, modifier = Modifier.weight(1f))
                 }
             }
 
@@ -361,9 +394,9 @@ fun ChatScreen(
                     .padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(messages, key = { it.id }) { msg ->
+                itemsIndexed(messages, key = { idx, msg -> "${msg.id}_$idx" }) { idx, msg ->
                     val isUser = msg.role == "user"
-                    val isLastAi = !isUser && messages.indexOf(msg) == lastAiIndex
+                    val isLastAi = !isUser && idx == lastAiIndex
 
                     Column(
                         modifier = Modifier.fillMaxWidth(),
@@ -521,6 +554,29 @@ fun ChatScreen(
             onSave = onSaveBotProfile,
             onResetChat = onResetChat,
             onDeleteBot = onDeleteBot
+        )
+    }
+
+    if (showQuickProfile) {
+        val context = LocalContext.current
+        val clipboardManager = LocalClipboardManager.current
+        BotQuickProfileSheet(
+            bot = bot,
+            keyCharacters = keyCharacters,
+            onDismiss = { showQuickProfile = false },
+            onSaveBot = { updatedBot ->
+                onSaveBotProfile(updatedBot, keyCharacters)
+            },
+            onOpenFullSettings = { showBotSettings = true },
+            onResetChat = {
+                showQuickProfile = false
+                onResetChat()
+            },
+            onExportChat = {
+                val fullText = messages.joinToString("\n\n") { "${if (it.role == "user") bot.userCharName.ifBlank { "Kullanıcı" } else displayName}: ${it.text}" }
+                clipboardManager.setText(AnnotatedString(fullText))
+                android.widget.Toast.makeText(context, "Tüm sohbet metni panoya kopyalandı!", android.widget.Toast.LENGTH_SHORT).show()
+            }
         )
     }
 }

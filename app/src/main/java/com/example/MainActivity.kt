@@ -84,7 +84,8 @@ fun EmochiAppMain(viewModel: EmochiViewModel) {
                     onDeleteBot = { viewModel.deleteBot(it) },
                     onSaveSettings = { viewModel.updateSettings(it) },
                     onExportData = { viewModel.exportBackupJson() },
-                    onImportData = { viewModel.importBackupJson(it) }
+                    onImportData = { viewModel.importBackupJson(it) },
+                    onImportPresetBot = { viewModel.createPresetBot(it) }
                 )
             }
 

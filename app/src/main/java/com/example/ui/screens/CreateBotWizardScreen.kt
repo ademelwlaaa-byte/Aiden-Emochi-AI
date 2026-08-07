@@ -153,6 +153,7 @@ fun CreateBotWizardScreen(
 
     Scaffold(
         containerColor = EmochiBackground,
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
         topBar = {
             Row(
                 modifier = Modifier

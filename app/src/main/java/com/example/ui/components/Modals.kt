@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -1714,6 +1715,189 @@ fun NeuralVaultModal(
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun BotQuickProfileSheet(
+    bot: BotEntity,
+    keyCharacters: List<KeyCharacter>,
+    onDismiss: () -> Unit,
+    onSaveBot: (BotEntity) -> Unit,
+    onOpenFullSettings: () -> Unit,
+    onResetChat: () -> Unit,
+    onExportChat: () -> Unit
+) {
+    var pinnedMemoryText by remember { mutableStateOf(bot.pinnedMemory) }
+    var storyNotesText by remember { mutableStateOf(bot.storyNotes) }
+    val isUniverse = bot.mode == "universe"
+    val displayName = if (isUniverse) bot.universeName.ifBlank { "Evren" } else bot.aiName.ifBlank { "Karakter" }
+    val context = LocalContext.current
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
+            shape = RoundedCornerShape(20.dp),
+            color = EmochiSurface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, EmochiBorder)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (bot.avatarUrl.isNotBlank()) {
+                            AsyncImage(
+                                model = bot.avatarUrl,
+                                contentDescription = displayName,
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .border(1.dp, EmochiBorder, CircleShape)
+                            )
+                        } else {
+                            OrbView(hue = 280f, size = 44.dp)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = displayName,
+                                color = EmochiTextPrimary,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isUniverse) Color(0xFF2A2C4A) else Color(0xFF1E2038))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = if (isUniverse) "Evren Senaryosu" else "Bireysel Karakter",
+                                    color = EmochiPrimary,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Kapat", tint = EmochiTextSecondary)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Personality / Scenario Card
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = EmochiCard),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, EmochiBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = if (isUniverse) "🌌 Evren Senaryosu" else "🎭 Karakter Kişiliği",
+                            color = EmochiPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (isUniverse) bot.scenario else bot.aiPersonality,
+                            color = EmochiTextSecondary,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Pinned Memory Quick Editor
+                Text("📌 Kalıcı Hafıza (Sabit Notlar)", color = EmochiTextPrimary, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "AI'nın unutmasını istemediğiniz detayları buraya yazın.",
+                    color = EmochiTextMuted,
+                    fontSize = 11.sp
+                )
+                OutlinedTextField(
+                    value = pinnedMemoryText,
+                    onValueChange = { pinnedMemoryText = it },
+                    placeholder = { Text("Kalıcı notlar ekle...", color = EmochiTextMuted, fontSize = 12.sp) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(85.dp)
+                        .padding(top = 4.dp),
+                    colors = customTextFieldColors()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Button(
+                    onClick = {
+                        onSaveBot(bot.copy(pinnedMemory = pinnedMemoryText, storyNotes = storyNotesText))
+                        Toast.makeText(context, "Hafıza güncellendi!", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = EmochiPrimary, contentColor = Color(0xFF1A1B2E)),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Hafızayı Kaydet", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+                Divider(color = EmochiBorder)
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Quick Action Buttons
+                Text("Hızlı İşlemler", color = EmochiTextPrimary, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = onExportChat,
+                        colors = ButtonDefaults.buttonColors(containerColor = EmochiCard),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("📋 Kopyala", color = EmochiPrimary, fontSize = 11.5.sp)
+                    }
+
+                    Button(
+                        onClick = onResetChat,
+                        colors = ButtonDefaults.buttonColors(containerColor = EmochiCard),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("🧹 Sıfırla", color = EmochiError, fontSize = 11.5.sp)
+                    }
+
+                    Button(
+                        onClick = {
+                            onDismiss()
+                            onOpenFullSettings()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = EmochiCard),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("⚙️ Ayarlar", color = EmochiTextPrimary, fontSize = 11.5.sp)
                     }
                 }
             }

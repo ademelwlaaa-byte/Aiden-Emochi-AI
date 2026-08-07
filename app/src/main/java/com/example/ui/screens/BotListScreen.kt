@@ -77,32 +77,122 @@ fun BotListScreen(
     onDeleteBot: (String) -> Unit,
     onSaveSettings: (UserSettingsEntity) -> Unit,
     onExportData: suspend () -> String,
-    onImportData: suspend (String) -> Unit
+    onImportData: suspend (String) -> Unit,
+    onImportPresetBot: ((BotEntity) -> Unit)? = null
 ) {
     var showGlobalSettings by remember { mutableStateOf(false) }
     var confirmDeleteId by remember { mutableStateOf<String?>(null) }
+    var selectedFilter by remember { mutableStateOf("all") } // "all", "personal", "universe"
+    var activeTab by remember { mutableStateOf("chats") } // "chats", "explore"
 
     Scaffold(
         containerColor = EmochiBackground,
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .background(EmochiSurface)
                     .navigationBarsPadding()
-                    .padding(16.dp)
             ) {
-                Button(
-                    onClick = onNewBot,
-                    colors = ButtonDefaults.buttonColors(containerColor = EmochiPrimary, contentColor = Color(0xFF1A1B2E)),
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
-                        .testTag("create_new_bot_button"),
-                    shape = RoundedCornerShape(26.dp)
+                        .height(1.dp)
+                        .background(EmochiBorder)
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Yeni Bot Oluştur", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    // 1. Keşfet
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { activeTab = "explore" }
+                            .padding(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.AutoAwesome,
+                            contentDescription = "Keşfet",
+                            tint = if (activeTab == "explore") EmochiPrimary else EmochiTextMuted,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Text("Keşfet", color = if (activeTab == "explore") EmochiPrimary else EmochiTextMuted, fontSize = 10.sp, fontWeight = if (activeTab == "explore") FontWeight.Bold else FontWeight.Normal, modifier = Modifier.padding(top = 2.dp))
+                    }
+
+                    // 2. Sohbetler
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { activeTab = "chats" }
+                            .padding(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.Speed,
+                            contentDescription = "Sohbetler",
+                            tint = if (activeTab == "chats") EmochiPrimary else EmochiTextMuted,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Text("Sohbetler", color = if (activeTab == "chats") EmochiPrimary else EmochiTextMuted, fontSize = 10.sp, fontWeight = if (activeTab == "chats") FontWeight.Bold else FontWeight.Normal, modifier = Modifier.padding(top = 2.dp))
+                    }
+
+                    // 3. Center (+) Yellow Button
+                    IconButton(
+                        onClick = onNewBot,
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(CircleShape)
+                            .background(EmochiPrimary)
+                            .testTag("create_new_bot_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Yeni Bot",
+                            tint = Color(0xFF1A1B2E),
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+
+                    // 4. Karakterler
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { selectedFilter = if (selectedFilter == "personal") "all" else "personal" }
+                            .padding(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.Search,
+                            contentDescription = "Filtrele",
+                            tint = if (selectedFilter == "personal") EmochiPrimary else EmochiTextMuted,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Text("Karakterler", color = if (selectedFilter == "personal") EmochiPrimary else EmochiTextMuted, fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp))
+                    }
+
+                    // 5. Ayarlar
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { showGlobalSettings = true }
+                            .padding(8.dp)
+                            .testTag("global_settings_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Ayarlar",
+                            tint = EmochiTextMuted,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Text("Ayarlar", color = EmochiTextMuted, fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp))
+                    }
                 }
             }
         }
@@ -123,7 +213,7 @@ fun BotListScreen(
             ) {
                 Column {
                     Text(
-                        text = "Botlarım",
+                        text = if (activeTab == "explore") "Keşfet & Şablonlar" else "Botlarım",
                         color = EmochiTextPrimary,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold
@@ -173,9 +263,11 @@ fun BotListScreen(
                 }
             }
 
-            // Search Bar & Filter Chips
-            var searchQuery by remember { mutableStateOf("") }
-            var selectedFilter by remember { mutableStateOf("all") } // "all", "personal", "universe"
+            if (activeTab == "explore") {
+                ExploreTabContent(onImportPresetBot = onImportPresetBot)
+            } else {
+                // Search Bar & Filter Chips
+                var searchQuery by remember { mutableStateOf("") }
 
             Column(
                 modifier = Modifier
@@ -409,6 +501,7 @@ fun BotListScreen(
             }
         }
     }
+    }
 
     if (showGlobalSettings && userSettings != null) {
         GlobalSettingsModal(
@@ -418,5 +511,164 @@ fun BotListScreen(
             onExportData = onExportData,
             onImportData = onImportData
         )
+    }
+}
+
+@Composable
+fun ExploreTabContent(
+    onImportPresetBot: ((BotEntity) -> Unit)?
+) {
+    val presets = remember {
+        listOf(
+            BotEntity(
+                id = java.util.UUID.randomUUID().toString(),
+                mode = "personal",
+                aiName = "Aria",
+                aiPersonality = "Zeki, doğrudan konuşan, gizemli, alaycı ama içten içe sadık.",
+                scenario = "Neo-Siberia şehrinde çalışan bağımsız bir siber güvenlik korsanı ve araştırmacı.",
+                universeName = "",
+                keyCharactersJson = "[]",
+                userCharName = "Dedektif",
+                userCharDesc = "Merge Şehrinden gelen tecrübeli adli bilişim uzmanı.",
+                openingMessage = "*Aria terminal ekranından başını kaldırır ve gözlerini kısarak sana bakar.* Nihayet geldin. Sunucularda bıraktığın dijital izleri temizlemem saatlerimi aldı...",
+                writingStyle = "rp",
+                intensity = "normal",
+                pinnedMemory = "GÖREV ::: SİBER ::: Merge şehrindeki veri sızıntısını araştırıyoruz."
+            ),
+            BotEntity(
+                id = java.util.UUID.randomUUID().toString(),
+                mode = "personal",
+                aiName = "Lord Valerius",
+                aiPersonality = "Ağırbaşlı, gizemli, yüksek özgüvenli, kütüphanelerinde kaybolmayı seven antika meraklısı.",
+                scenario = "Unutulmuş Ruhlar Kulesi'nin karanlık ve kudretli büyücüsü.",
+                universeName = "",
+                keyCharactersJson = "[]",
+                userCharName = "Çırak",
+                userCharDesc = "Karanlık büyü sanatlarını öğrenmek isteyen yetenekli genç büyücü.",
+                openingMessage = "*Karanlık kütüphanenin yüksek pencerelerinden süzülen mor ışık altında kadim kitabı kapatır.* Adımların tereddütlü. Karşıma çıkmaya hazır olduğuna emin misin, çırak?",
+                writingStyle = "rp",
+                intensity = "intense",
+                pinnedMemory = "BÜYÜ ::: AKADEMİ ::: Kadim rünlerin kökenini araştırıyoruz."
+            ),
+            BotEntity(
+                id = java.util.UUID.randomUUID().toString(),
+                mode = "personal",
+                aiName = "Sora",
+                aiPersonality = "Enerjik, neşeli, empati gücü yüksek, eski günleri yâd etmeyi seven sıcakkanlı.",
+                scenario = "Yıllar sonra karşılaştığın neşeli ve cana yakın çocukluk arkadaşın.",
+                universeName = "",
+                keyCharactersJson = "[]",
+                userCharName = "Dostum",
+                userCharDesc = "Uzun zamandır memleketine dönmemiş eski arkadaşı.",
+                openingMessage = "*Sora gözleri parlayarak sana doğru koşar.* İnanmıyorum! Gerçekten sensin! Kaç yıl oldu, hiç değişmemişsin!",
+                writingStyle = "chat",
+                intensity = "normal",
+                pinnedMemory = "ARKADAŞLIK ::: HATIRA ::: Küçükken mahalledeki eski ahşap evde oynardık."
+            ),
+            BotEntity(
+                id = java.util.UUID.randomUUID().toString(),
+                mode = "universe",
+                aiName = "Eldoria Krallığı",
+                aiPersonality = "Eldoria anlatıcısı.",
+                scenario = "Savaşın eşiğindeki feodal bir fantezi dünyası. Ejderhalar, krallıklar ve loncalar.",
+                universeName = "Eldoria Krallığı",
+                keyCharactersJson = "[]",
+                userCharName = "Savaşçı",
+                userCharDesc = "Gezgin bir lonca paralı askeri.",
+                openingMessage = "Eldoria Krallığı'nın doğu sınırındaki Sisli Vadi'de gece çöküyor. Hanın kapısı gıcırdayarak açıldığında içeri soğuk bir rüzgar giriyor...",
+                writingStyle = "rp",
+                intensity = "normal",
+                pinnedMemory = "EVREN ::: ELDORİA ::: Kraliyet muhafızları ve asi loncaları arasında gerilim tırmanıyor."
+            ),
+            BotEntity(
+                id = java.util.UUID.randomUUID().toString(),
+                mode = "universe",
+                aiName = "Sığınak 13",
+                aiPersonality = "Sığınak 13 anlatıcısı.",
+                scenario = "Nükleer serpinti ve mutant yaratıkların kol gezdiği çorak topraklar.",
+                universeName = "Sığınak 13: Kıyamet Sonrası",
+                keyCharactersJson = "[]",
+                userCharName = "Hayatta Kalan",
+                userCharDesc = "Kaynak arayan yalnız bir izci.",
+                openingMessage = "Geiger sayacının cızırtısı kulağında yankılanıyor. Yıkılmış köprünün altında paslı bir sığınak kapısı duruyor...",
+                writingStyle = "rp",
+                intensity = "intense",
+                pinnedMemory = "EVREN ::: KIYAMET ::: Temiz su ve tıbbi malzeme stoku tükenmek üzere."
+            )
+        )
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item {
+            Text("🔥 Popüler Topluluk Karakterleri & Evrenler", color = EmochiTextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 4.dp))
+            Text("Hazır karakterlerden birini seçerek anında derin sohbet ve rol yapma simülasyonuna başlayın.", color = EmochiTextSecondary, fontSize = 12.sp)
+        }
+
+        items(presets) { preset ->
+            val isUniverse = preset.mode == "universe"
+            val title = if (isUniverse) preset.universeName else preset.aiName
+            val hue = MoodColors.getMoodHue(if (isUniverse) "tense" else "joy")
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = EmochiSurface),
+                shape = RoundedCornerShape(16.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, EmochiBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OrbView(hue = hue, size = 44.dp)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(title, color = EmochiTextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                            Box(
+                                modifier = Modifier
+                                    .padding(top = 2.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isUniverse) Color(0xFF2A2C4A) else Color(0xFF1E2038))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = if (isUniverse) "🌌 Evren" else "🎭 Karakter (${preset.userCharName})",
+                                    color = EmochiPrimary,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = preset.scenario,
+                        color = EmochiTextSecondary,
+                        fontSize = 12.5.sp,
+                        lineHeight = 17.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = {
+                            val newBot = preset.copy(id = java.util.UUID.randomUUID().toString())
+                            onImportPresetBot?.invoke(newBot)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = EmochiPrimary, contentColor = Color(0xFF1A1B2E)),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("⚡ Sohbete Başla", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+            }
+        }
     }
 }

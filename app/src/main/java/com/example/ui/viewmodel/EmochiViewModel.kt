@@ -38,14 +38,14 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
     val botList: StateFlow<List<BotEntity>> = repository.allBots
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
+            started = SharingStarted.Eagerly,
             initialValue = emptyList()
         )
 
     val userSettings: StateFlow<UserSettingsEntity?> = repository.userSettingsFlow
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
+            started = SharingStarted.Eagerly,
             initialValue = null
         )
 
@@ -59,7 +59,7 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
         }
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
+            started = SharingStarted.Eagerly,
             initialValue = null
         )
 
@@ -70,7 +70,7 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
         }
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
+            started = SharingStarted.Eagerly,
             initialValue = emptyList()
         )
 
@@ -350,6 +350,13 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
             if (_activeBotId.value == botId) {
                 openMenu()
             }
+        }
+    }
+
+    fun createPresetBot(preset: BotEntity) {
+        viewModelScope.launch {
+            repository.saveBot(preset)
+            openBot(preset.id)
         }
     }
 

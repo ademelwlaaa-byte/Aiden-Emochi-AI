@@ -264,6 +264,93 @@ Durdu, ifadesi ciddileşti.
         }
     }
 
+    private fun formatMessagesForGemini(messages: List<MessageEntity>): List<GeminiContent> {
+        val recentMsgs = messages.takeLast(30)
+        if (recentMsgs.isEmpty()) {
+            return listOf(
+                GeminiContent(
+                    role = "user",
+                    parts = listOf(GeminiPart(text = "Sohbeti başlat."))
+                )
+            )
+        }
+
+        val result = mutableListOf<GeminiContent>()
+
+        // Ensure first content turn starts with user
+        val adjustedMsgs = mutableListOf<MessageEntity>()
+        if (recentMsgs.first().role != "user") {
+            adjustedMsgs.add(
+                MessageEntity(
+                    id = "virtual_init",
+                    botId = recentMsgs.first().botId,
+                    role = "user",
+                    text = "Sohbet/Sahne başlatıldı.",
+                    timestamp = 0L
+                )
+            )
+        }
+        adjustedMsgs.addAll(recentMsgs)
+
+        // Merge consecutive same-role messages
+        for (m in adjustedMsgs) {
+            val currentRole = if (m.role == "user") "user" else "model"
+            if (result.isNotEmpty() && result.last().role == currentRole) {
+                val lastContent = result.removeAt(result.size - 1)
+                val prevText = lastContent.parts.firstOrNull()?.text ?: ""
+                val mergedText = "$prevText\n\n${m.text}"
+                result.add(
+                    GeminiContent(
+                        role = currentRole,
+                        parts = listOf(GeminiPart(text = mergedText))
+                    )
+                )
+            } else {
+                result.add(
+                    GeminiContent(
+                        role = currentRole,
+                        parts = listOf(GeminiPart(text = m.text))
+                    )
+                )
+            }
+        }
+
+        return result
+    }
+
+    private fun formatMessagesForStandardApi(messages: List<MessageEntity>): List<Pair<String, String>> {
+        val recentMsgs = messages.takeLast(30)
+        if (recentMsgs.isEmpty()) {
+            return listOf(Pair("user", "Sohbeti başlat."))
+        }
+
+        val adjustedMsgs = mutableListOf<MessageEntity>()
+        if (recentMsgs.first().role != "user") {
+            adjustedMsgs.add(
+                MessageEntity(
+                    id = "virtual_init",
+                    botId = recentMsgs.first().botId,
+                    role = "user",
+                    text = "Sohbet/Sahne başlatıldı.",
+                    timestamp = 0L
+                )
+            )
+        }
+        adjustedMsgs.addAll(recentMsgs)
+
+        val result = mutableListOf<Pair<String, String>>()
+        for (m in adjustedMsgs) {
+            val role = if (m.role == "user") "user" else "assistant"
+            if (result.isNotEmpty() && result.last().first == role) {
+                val last = result.removeAt(result.size - 1)
+                result.add(Pair(role, "${last.second}\n\n${m.text}"))
+            } else {
+                result.add(Pair(role, m.text))
+            }
+        }
+        return result
+    }
+
     private suspend fun callGeminiApi(
         apiKey: String,
         model: String,
@@ -271,13 +358,7 @@ Durdu, ifadesi ciddileşti.
         messages: List<MessageEntity>
     ): Pair<String, Pair<Long, Long>> = withContext(Dispatchers.IO) {
         val sanitizedModel = sanitizeModelName(model)
-        val recentMsgs = messages.takeLast(30)
-        val geminiContents = recentMsgs.map { m ->
-            GeminiContent(
-                role = if (m.role == "user") "user" else "model",
-                parts = listOf(GeminiPart(text = m.text))
-            )
-        }
+        val geminiContents = formatMessagesForGemini(messages)
 
         val request = GeminiRequest(
             contents = geminiContents,
@@ -340,15 +421,16 @@ Durdu, ifadesi ciddileşti.
         systemPrompt: String,
         messages: List<MessageEntity>
     ): Pair<String, Pair<Long, Long>> = withContext(Dispatchers.IO) {
+        val standardMsgs = formatMessagesForStandardApi(messages)
         val jsonMessages = JSONArray()
         jsonMessages.put(JSONObject().apply {
             put("role", "system")
             put("content", systemPrompt)
         })
-        for (m in messages.takeLast(30)) {
+        for (m in standardMsgs) {
             jsonMessages.put(JSONObject().apply {
-                put("role", if (m.role == "user") "user" else "assistant")
-                put("content", m.text)
+                put("role", m.first)
+                put("content", m.second)
             })
         }
 
@@ -394,11 +476,12 @@ Durdu, ifadesi ciddileşti.
         systemPrompt: String,
         messages: List<MessageEntity>
     ): Pair<String, Pair<Long, Long>> = withContext(Dispatchers.IO) {
+        val standardMsgs = formatMessagesForStandardApi(messages)
         val jsonMessages = JSONArray()
-        for (m in messages.takeLast(30)) {
+        for (m in standardMsgs) {
             jsonMessages.put(JSONObject().apply {
-                put("role", if (m.role == "user") "user" else "assistant")
-                put("content", m.text)
+                put("role", m.first)
+                put("content", m.second)
             })
         }
 
