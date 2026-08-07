@@ -42,6 +42,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -133,7 +135,7 @@ fun BotListScreen(
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = buildString {
-                                append(userSettings?.selectedModel?.ifBlank { "gemini-3.5-flash" } ?: "gemini-3.5-flash")
+                                append(userSettings?.selectedModel?.ifBlank { "gemini-2.5-flash" } ?: "gemini-2.5-flash")
                                 val lenLabel = when(userSettings?.responseLength) {
                                     "short" -> " ⚡ Kısa"
                                     "long" -> " 📖 Uzun"
@@ -216,7 +218,19 @@ fun BotListScreen(
                                     .padding(14.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                OrbView(hue = hue, size = 42.dp)
+                                if (bot.avatarUrl.isNotBlank()) {
+                                    AsyncImage(
+                                        model = bot.avatarUrl,
+                                        contentDescription = displayName,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .size(42.dp)
+                                            .clip(CircleShape)
+                                            .border(1.dp, EmochiBorder, CircleShape)
+                                    )
+                                } else {
+                                    OrbView(hue = hue, size = 42.dp)
+                                }
                                 Spacer(modifier = Modifier.width(12.dp))
 
                                 Column(modifier = Modifier.weight(1f)) {

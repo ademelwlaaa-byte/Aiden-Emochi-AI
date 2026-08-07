@@ -158,7 +158,19 @@ fun ChatScreen(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        OrbView(hue = hue, size = 32.dp)
+                        if (bot.avatarUrl.isNotBlank()) {
+                            coil.compose.AsyncImage(
+                                model = bot.avatarUrl,
+                                contentDescription = displayName,
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .border(1.dp, EmochiBorder, CircleShape)
+                            )
+                        } else {
+                            OrbView(hue = hue, size = 32.dp)
+                        }
                         Spacer(modifier = Modifier.width(8.dp))
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
@@ -197,7 +209,7 @@ fun ChatScreen(
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = buildString {
-                                append(userSettings?.selectedModel?.ifBlank { "gemini-3.5-flash" } ?: "gemini-3.5-flash")
+                                append(userSettings?.selectedModel?.ifBlank { "gemini-2.5-flash" } ?: "gemini-2.5-flash")
                                 val effLen = if (bot.customLength != "default") bot.customLength else userSettings?.responseLength
                                 when (effLen) {
                                     "short" -> append(" (Kısa)")

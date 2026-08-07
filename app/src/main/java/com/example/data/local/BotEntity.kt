@@ -19,6 +19,7 @@ data class BotEntity(
     val intensity: String, // "normal" or "intense"
     val customLength: String = "default", // "default", "short", "standard", "long"
     val isNsfw: Boolean = true, // +18 / Filtresiz RP
+    val avatarUrl: String = "",
     val pinnedMemory: String = "",
     val storyNotes: String = "",
     val memoryNotes: String = "",

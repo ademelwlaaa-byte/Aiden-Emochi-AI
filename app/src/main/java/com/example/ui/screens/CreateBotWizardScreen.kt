@@ -82,6 +82,8 @@ fun CreateBotWizardScreen(
     var mode by remember { mutableStateOf("personal") }
     var aiName by remember { mutableStateOf("") }
     var aiPersonality by remember { mutableStateOf("") }
+    var avatarUrl by remember { mutableStateOf("") }
+    var pinnedMemory by remember { mutableStateOf("") }
     var scenario by remember { mutableStateOf("") }
     var universeName by remember { mutableStateOf("") }
     var userCharName by remember { mutableStateOf("") }
@@ -95,6 +97,12 @@ fun CreateBotWizardScreen(
     var isGeneratingOpening by remember { mutableStateOf(false) }
     var genError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+
+    val photoPickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri: android.net.Uri? ->
+        uri?.let { avatarUrl = it.toString() }
+    }
 
     val totalSteps = 5
 
@@ -115,6 +123,8 @@ fun CreateBotWizardScreen(
             mode = mode,
             aiName = aiName.trim(),
             aiPersonality = aiPersonality.trim(),
+            avatarUrl = avatarUrl.trim(),
+            pinnedMemory = pinnedMemory.trim(),
             scenario = scenario.trim(),
             universeName = universeName.trim(),
             keyCharactersJson = serializedCast,
@@ -241,7 +251,67 @@ fun CreateBotWizardScreen(
                     // Step 2: Personality or Universe details
                     if (mode == "personal") {
                         Text("Karakter Detayları", color = EmochiTextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        Text("Karşınızdaki karakterin adını ve kişiliğini tanımlayın.", color = EmochiTextSecondary, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
+                        Text("Karşınızdaki karakterin resmini, adını ve kişiliğini tanımlayın.", color = EmochiTextSecondary, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
+
+                        // Avatar Upload Box
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = EmochiCard),
+                            shape = RoundedCornerShape(14.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, EmochiBorder),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 14.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(54.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF252535)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (avatarUrl.isNotBlank()) {
+                                        coil.compose.AsyncImage(
+                                            model = avatarUrl,
+                                            contentDescription = "Avatar",
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else {
+                                        Icon(Icons.Default.Person, contentDescription = null, tint = EmochiPrimary, modifier = Modifier.size(24.dp))
+                                    }
+                                }
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Bot Profil Fotoğrafı", color = EmochiTextPrimary, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                                    Text("Galeriden kapak resmi yükle", color = EmochiTextMuted, fontSize = 11.sp)
+                                    
+                                    Row(modifier = Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Button(
+                                            onClick = { photoPickerLauncher.launch("image/*") },
+                                            colors = ButtonDefaults.buttonColors(containerColor = EmochiPrimary, contentColor = Color(0xFF1A1B2E)),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.height(28.dp)
+                                        ) {
+                                            Text("🖼️ Fotoğraf Seç", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                        if (avatarUrl.isNotBlank()) {
+                                            TextButton(
+                                                onClick = { avatarUrl = "" },
+                                                modifier = Modifier.height(28.dp)
+                                            ) {
+                                                Text("Sil", fontSize = 11.sp, color = EmochiError)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
 
                         Text("Karakter Adı *", color = EmochiTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         OutlinedTextField(

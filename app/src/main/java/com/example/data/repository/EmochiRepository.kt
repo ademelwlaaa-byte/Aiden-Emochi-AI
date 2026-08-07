@@ -118,10 +118,20 @@ class EmochiRepository(private val db: AppDatabase) {
             "\n\n## Süregelen hikaye durumu\n${bot.storyNotes}"
         } else ""
 
-        // +18 NSFW Policy
+        // +18 NSFW Policy & Active Filter Directives
         val isNsfwAllowed = settings.enableNsfw && bot.isNsfw
+        val filterDirectives = mutableListOf<String>()
         val nsfwPolicy = if (isNsfwAllowed) {
-            "## İÇERİK POLİTİKASI: +18 / FİLTRESİZ BİÇİM (+18 YETİŞKİN MODU)\n- Bu hikaye +18 / filtresiz rol yapma modundadır. Gerilim, şiddet, karanlık temalar, romantizm, cinsel ima/yakınlık ve ham duygular sansürlenmeden, dürüstçe yazılabilir. Yumuşatma yapma."
+            filterDirectives.add("18+ Yetişkin / Filtresiz RP serbesttir.")
+            if (settings.enableFlirty) filterDirectives.add("ÇAPKINKLIK (FLIRTY): Karakter diyaloglarında çapkın, flörtöz ve baştan çıkarıcı bir eda benimser.")
+            if (settings.enableHardcore) filterDirectives.add("SERT MOD (HARDCORE): Duygular, fiziksel tepkiler ve tutku sert, filtresiz ve yüksek yoğunlukta ifade edilir.")
+            if (settings.enableFetish) filterDirectives.add("FANTEZİ (FETISH): Özel fantezi unsurlarına ve arzulara açık, tabusuz kurgu desteklenir.")
+            if (settings.enableDarkRp) filterDirectives.add("KARANLIK (DARK RP): Gerilim, psikolojik derinlik, tehlike ve karanlık atmosfer belirgin hissedilir.")
+            if (settings.enableSweet) filterDirectives.add("ROMANTİK (SWEET): Şefkat, tatlı yakınlık, duygusal romantizm ön plandadır.")
+            if (settings.enablePrimal) filterDirectives.add("VAHŞİ (PRIMAL): Ham içgüdüler, id ve baskılanmamış arzularla karakter harekete geçer.")
+            
+            "## İÇERİK POLİTİKASI: +18 / FİLTRESİZ BİÇİM (+18 YETİŞKİN MODU)\n- Bu hikaye +18 / filtresiz rol yapma modundadır. Gerilim, şiddet, karanlık temalar, romantizm, cinsel ima/yakınlık ve ham duygular sansürlenmeden, dürüstçe yazılabilir. Yumuşatma yapma." +
+                    if (filterDirectives.isNotEmpty()) "\n\n### AKTİF MODLAR VE İÇERİK FİLTRELERİ:\n- " + filterDirectives.joinToString("\n- ") else ""
         } else {
             "## İÇERİK POLİTİKASI: GÜVENLİ / DENGELİ MOD\n- Aile dostu, genel izleyici kitlesine uygun, grafik şiddet veya cinsel açıklık içermeyen dengeli bir anlatım kullan."
         }
@@ -176,11 +186,13 @@ Durdu, ifadesi ciddileşti.
 
     // --- API Service Execution Engine ---
 
-    private fun mapGeminiModel(model: String): String {
-        return when (model) {
-            "gemini-3.5-flash", "gemini-2.5-flash" -> "gemini-2.0-flash"
-            "gemini-3.1-pro-preview", "gemini-2.5-pro" -> "gemini-1.5-pro"
-            else -> if (model.startsWith("gemini-")) model else "gemini-2.0-flash"
+    private fun sanitizeModelName(model: String): String {
+        val clean = model.trim().lowercase()
+        return when {
+            clean == "gemini-1.5-flash" -> "gemini-2.5-flash"
+            clean == "gemini-1.5-pro" -> "gemini-2.5-pro"
+            clean.isEmpty() -> "gemini-2.5-flash"
+            else -> model.trim()
         }
     }
 
@@ -190,7 +202,7 @@ Durdu, ifadesi ciddileşti.
         systemPrompt: String,
         messages: List<MessageEntity>
     ): Pair<String, Pair<Long, Long>> = withContext(Dispatchers.IO) {
-        val mappedModel = mapGeminiModel(model)
+        val sanitizedModel = sanitizeModelName(model)
         val recentMsgs = messages.takeLast(30)
         val geminiContents = recentMsgs.map { m ->
             GeminiContent(
@@ -205,27 +217,39 @@ Durdu, ifadesi ciddileşti.
             generationConfig = GeminiGenerationConfig(temperature = 0.85f)
         )
 
-        try {
-            val response = RetrofitClient.service.generateContent(
-                model = mappedModel,
-                apiKey = apiKey,
-                request = request
-            )
+        val modelsToTry = listOf(sanitizedModel, "gemini-2.5-flash", "gemini-2.0-flash").distinct()
+        var lastException: Exception? = null
 
-            val text = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
-                ?: throw IllegalStateException("Gemini boş yanıt döndürdü.")
+        for (currModel in modelsToTry) {
+            try {
+                val response = RetrofitClient.service.generateContent(
+                    model = currModel,
+                    apiKey = apiKey,
+                    request = request
+                )
 
-            val promptTokens = response.usageMetadata?.promptTokenCount?.toLong() ?: 0L
-            val candTokens = response.usageMetadata?.candidatesTokenCount?.toLong() ?: 0L
+                val text = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                    ?: throw IllegalStateException("Gemini boş yanıt döndürdü.")
 
-            Pair(text.trim(), Pair(promptTokens, candTokens))
-        } catch (e: retrofit2.HttpException) {
-            val errorJson = e.response()?.errorBody()?.string()
-            val msg = try {
-                JSONObject(errorJson ?: "").optJSONObject("error")?.optString("message")
-            } catch (_: Exception) { null }
-            throw IllegalStateException(msg ?: "Gemini API Hatası [${e.code()}]: ${e.message()}")
+                val promptTokens = response.usageMetadata?.promptTokenCount?.toLong() ?: 0L
+                val candTokens = response.usageMetadata?.candidatesTokenCount?.toLong() ?: 0L
+
+                return@withContext Pair(text.trim(), Pair(promptTokens, candTokens))
+            } catch (e: retrofit2.HttpException) {
+                val errorJson = e.response()?.errorBody()?.string()
+                val msg = try {
+                    JSONObject(errorJson ?: "").optJSONObject("error")?.optString("message")
+                } catch (_: Exception) { null }
+                val exc = IllegalStateException(msg ?: "Gemini API Hatası [${e.code()}]: ${e.message()}")
+                lastException = exc
+                if (e.code() != 404) {
+                    throw exc
+                }
+            } catch (e: Exception) {
+                lastException = e
+            }
         }
+        throw lastException ?: IllegalStateException("Gemini API çağrısı başarısız oldu.")
     }
 
     private suspend fun callOpenAiCompatibleApi(
@@ -342,7 +366,7 @@ Durdu, ifadesi ciddileşti.
         val settings = getOrCreateSettings()
         val systemPrompt = buildSystemPrompt(bot, settings)
 
-        val selectedModel = settings.selectedModel.ifBlank { "gemini-2.0-flash" }
+        val selectedModel = sanitizeModelName(settings.selectedModel.ifBlank { "gemini-2.5-flash" })
 
         // Primary Execution
         try {
@@ -356,7 +380,7 @@ Durdu, ifadesi ciddileşti.
         }
 
         // Auto Fallback to Gemini Secondary Model
-        val fallbackModel = settings.fallbackModel.ifBlank { "gemini-1.5-flash" }
+        val fallbackModel = sanitizeModelName(settings.fallbackModel.ifBlank { "gemini-2.0-flash" })
         val geminiKey = if (settings.customApiKey.isNotBlank()) settings.customApiKey else BuildConfig.GEMINI_API_KEY
         val backupKey = if (settings.backupApiKey.isNotBlank()) settings.backupApiKey else geminiKey
 
@@ -427,12 +451,12 @@ Durdu, ifadesi ciddileşti.
         val requestMsgs = listOf(MessageEntity(id = "init", botId = bot.id, role = "user", text = "Sahneyi/mesajı başlat.", timestamp = 0L))
 
         return@withContext try {
-            val result = executeModelRequest(settings.selectedModel.ifBlank { "gemini-2.0-flash" }, settings, systemPrompt, requestMsgs)
+            val result = executeModelRequest(sanitizeModelName(settings.selectedModel.ifBlank { "gemini-2.5-flash" }), settings, systemPrompt, requestMsgs)
             recordTokenUsage(result.second.first, result.second.second)
             result.first
         } catch (e: Exception) {
             if (apiKey.isNotBlank() && apiKey != "MY_GEMINI_API_KEY") {
-                val res = callGeminiApi(apiKey, "gemini-2.0-flash", systemPrompt, requestMsgs)
+                val res = callGeminiApi(apiKey, "gemini-2.5-flash", systemPrompt, requestMsgs)
                 recordTokenUsage(res.second.first, res.second.second)
                 res.first
             } else {
@@ -460,7 +484,7 @@ Durdu, ifadesi ciddileşti.
 
         try {
             val requestMsgs = listOf(MessageEntity(id = "sum", botId = bot.id, role = "user", text = "$prompt\n\nSAHNE:\n$recapText", timestamp = 0L))
-            val res = callGeminiApi(apiKey, "gemini-2.0-flash", "Sen yardımcı bir özetleyicisin.", requestMsgs)
+            val res = callGeminiApi(apiKey, "gemini-2.5-flash", "Sen yardımcı bir özetleyicisin.", requestMsgs)
             recordTokenUsage(res.second.first, res.second.second)
             val raw = res.first
 
@@ -505,14 +529,114 @@ Durdu, ifadesi ciddileşti.
     }
 
     suspend fun importDataSnapshot(jsonStr: String) = withContext(Dispatchers.IO) {
-        val snapshot = backupAdapter.fromJson(jsonStr)
-            ?: throw IllegalArgumentException("Geçersiz yedek verisi.")
-
-        settingsDao.insertOrUpdate(snapshot.settings)
-
-        for (bot in snapshot.bots) {
-            botDao.insertOrUpdate(bot)
+        val trimmed = jsonStr.trim()
+        if (trimmed.isBlank()) {
+            throw IllegalArgumentException("İçe aktarılacak metin boş.")
         }
-        messageDao.insertAllMessages(snapshot.messages)
+
+        // 1. Try standard Moshi backup snapshot
+        try {
+            val snapshot = backupAdapter.fromJson(trimmed)
+            if (snapshot != null) {
+                settingsDao.insertOrUpdate(snapshot.settings)
+                for (bot in snapshot.bots) {
+                    botDao.insertOrUpdate(bot)
+                }
+                if (snapshot.messages.isNotEmpty()) {
+                    messageDao.insertAllMessages(snapshot.messages)
+                }
+                return@withContext
+            }
+        } catch (_: Exception) {
+            // Fallthrough to custom JSON parser
+        }
+
+        // 2. Custom robust parser for partial backups, single bots, lists, or character cards
+        if (trimmed.startsWith("{")) {
+            val obj = JSONObject(trimmed)
+            if (obj.has("bots") || obj.has("messages") || obj.has("settings")) {
+                // Partial backup object
+                if (obj.has("settings")) {
+                    try {
+                        val sObj = obj.getJSONObject("settings")
+                        val settings = getOrCreateSettings().copy(
+                            customApiKey = sObj.optString("customApiKey", ""),
+                            groqApiKey = sObj.optString("groqApiKey", ""),
+                            claudeApiKey = sObj.optString("claudeApiKey", ""),
+                            openaiApiKey = sObj.optString("openaiApiKey", ""),
+                            backupApiKey = sObj.optString("backupApiKey", ""),
+                            selectedModel = sObj.optString("selectedModel", "gemini-2.5-flash"),
+                            fallbackModel = sObj.optString("fallbackModel", "gemini-2.0-flash")
+                        )
+                        settingsDao.insertOrUpdate(settings)
+                    } catch (_: Exception) {}
+                }
+                if (obj.has("bots")) {
+                    val bArr = obj.getJSONArray("bots")
+                    for (i in 0 until bArr.length()) {
+                        val bObj = bArr.getJSONObject(i)
+                        parseAndSaveBotObject(bObj)
+                    }
+                }
+            } else {
+                // Single bot or Character Card
+                parseAndSaveBotObject(obj)
+            }
+        } else if (trimmed.startsWith("[")) {
+            val arr = JSONArray(trimmed)
+            for (i in 0 until arr.length()) {
+                val item = arr.get(i)
+                if (item is JSONObject) {
+                    parseAndSaveBotObject(item)
+                }
+            }
+        } else {
+            throw IllegalArgumentException("Geçersiz JSON formatı. Lütfen geçerli bir yedek veya karakter dosyası yapıştırın.")
+        }
+    }
+
+    private suspend fun parseAndSaveBotObject(obj: JSONObject) {
+        val name = obj.optString("aiName").ifBlank {
+            obj.optString("name").ifBlank {
+                obj.optString("char_name", "İçe Aktarılan Bot")
+            }
+        }
+        val personality = obj.optString("aiPersonality").ifBlank {
+            obj.optString("personality").ifBlank {
+                obj.optString("description", "")
+            }
+        }
+        val scenario = obj.optString("scenario").ifBlank {
+            obj.optString("world_scenario", "")
+        }
+        val openingMsg = obj.optString("openingMessage").ifBlank {
+            obj.optString("firstMessage").ifBlank {
+                obj.optString("first_mes").ifBlank {
+                    obj.optString("greeting", "Merhaba!")
+                }
+            }
+        }
+
+        val bot = BotEntity(
+            id = obj.optString("id").ifBlank { UUID.randomUUID().toString() },
+            mode = obj.optString("mode", "personal"),
+            aiName = name,
+            aiPersonality = personality,
+            scenario = scenario,
+            universeName = obj.optString("universeName", "Evren"),
+            keyCharactersJson = obj.optString("keyCharactersJson", "[]"),
+            userCharName = obj.optString("userCharName", "Kullanıcı"),
+            userCharDesc = obj.optString("userCharDesc", ""),
+            openingMessage = openingMsg,
+            writingStyle = obj.optString("writingStyle", "Sohbet"),
+            intensity = obj.optString("intensity", "Normal"),
+            customLength = obj.optString("customLength", "default"),
+            isNsfw = obj.optBoolean("isNsfw", true),
+            pinnedMemory = obj.optString("pinnedMemory", ""),
+            storyNotes = obj.optString("storyNotes", ""),
+            memoryNotes = obj.optString("memoryNotes", ""),
+            updatedAt = System.currentTimeMillis()
+        )
+        botDao.insertOrUpdate(bot)
     }
 }

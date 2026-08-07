@@ -1,6 +1,10 @@
 package com.example.ui.components
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -24,12 +29,15 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import coil.compose.AsyncImage
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -81,6 +89,15 @@ import com.example.ui.theme.EmochiTextPrimary
 import com.example.ui.theme.EmochiTextSecondary
 import kotlinx.coroutines.launch
 
+data class ModelSpec(
+    val key: String,
+    val name: String,
+    val provider: String,
+    val tokenCostRate: String,
+    val badgeColor: Color,
+    val description: String
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GlobalSettingsModal(
@@ -100,6 +117,12 @@ fun GlobalSettingsModal(
     var fallbackModel by remember { mutableStateOf(settings.fallbackModel) }
     var responseLength by remember { mutableStateOf(settings.responseLength) }
     var enableNsfw by remember { mutableStateOf(settings.enableNsfw) }
+    var enableFlirty by remember { mutableStateOf(settings.enableFlirty) }
+    var enableHardcore by remember { mutableStateOf(settings.enableHardcore) }
+    var enableFetish by remember { mutableStateOf(settings.enableFetish) }
+    var enableDarkRp by remember { mutableStateOf(settings.enableDarkRp) }
+    var enableSweet by remember { mutableStateOf(settings.enableSweet) }
+    var enablePrimal by remember { mutableStateOf(settings.enablePrimal) }
     var enableAutoFallback by remember { mutableStateOf(settings.enableAutoFallback) }
     var enableTts by remember { mutableStateOf(settings.enableTts) }
 
@@ -114,19 +137,129 @@ fun GlobalSettingsModal(
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
 
-    val modelsMap = mapOf(
-        "gemini-2.0-flash" to "⚡ Gemini 2.0 Flash (En Hızlı & Yetenekli)",
-        "gemini-1.5-pro" to "🧠 Gemini 1.5 Pro (Yüksek Akıl Yürütme)",
-        "gemini-1.5-flash" to "⚡ Gemini 1.5 Flash (Standart Hızlı)",
-        "gemini-3.5-flash" to "⚡ Gemini 3.5 Flash (Deneysel Flash)",
-        "gemini-3.1-pro-preview" to "🧠 Gemini 3.1 Pro (Deneysel Pro)",
-        "llama-3.3-70b-versatile" to "🚀 Groq Llama 3.3 70B (Süper Hızlı Groq)",
-        "deepseek-r1-distill-llama-70b" to "🧩 Groq DeepSeek R1 (Akıllı Kurgu)",
-        "claude-3-5-sonnet-20241022" to "📖 Claude 3.5 Sonnet (Efsane Roman / Yüksek Token)",
-        "claude-3-5-haiku-20241022" to "⚡ Claude 3.5 Haiku (Hızlı & Akıcı RP)",
-        "gpt-4o-mini" to "💡 OpenAI GPT-4o Mini (Hızlı & Ekonomik)",
-        "deepseek-chat" to "🧩 DeepSeek V3 (Bütçe Dostu Zeka)"
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            scope.launch {
+                try {
+                    isBusy = true
+                    val content = context.contentResolver.openInputStream(it)?.use { stream ->
+                        stream.bufferedReader().use { reader -> reader.readText() }
+                    } ?: ""
+                    if (content.isNotBlank()) {
+                        onImportData(content)
+                        Toast.makeText(context, "Yedek dosyadan yüklendi!", Toast.LENGTH_SHORT).show()
+                        statusMessage = "Dosya başarıyla içe aktarıldı."
+                    }
+                } catch (e: Exception) {
+                    statusMessage = "Yükleme hatası: ${e.message}"
+                } finally {
+                    isBusy = false
+                }
+            }
+        }
+    }
+
+    val saveFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri: Uri? ->
+        uri?.let {
+            scope.launch {
+                try {
+                    isBusy = true
+                    val json = if (exportJson.isNotBlank()) exportJson else onExportData()
+                    exportJson = json
+                    context.contentResolver.openOutputStream(it)?.use { stream ->
+                        stream.write(json.toByteArray())
+                    }
+                    Toast.makeText(context, "Yedek dosyaya kaydedildi!", Toast.LENGTH_SHORT).show()
+                    statusMessage = "Yedek dosyaya kaydedildi."
+                } catch (e: Exception) {
+                    statusMessage = "Kaydetme hatası: ${e.message}"
+                } finally {
+                    isBusy = false
+                }
+            }
+        }
+    }
+
+    val modelsList = listOf(
+        ModelSpec(
+            key = "gemini-2.5-flash",
+            name = "Gemini 2.5 Flash",
+            provider = "Google Gemini",
+            tokenCostRate = "🟢 Düşük (~0.5x Token Tüketimi)",
+            badgeColor = Color(0xFF4CAF50),
+            description = "En gelişmiş, dengeli ve hızlı Gemini modeli. Düşük token harcaması ile yüksek kaliteli rol yapma yanıtları verir."
+        ),
+        ModelSpec(
+            key = "gemini-2.0-flash",
+            name = "Gemini 2.0 Flash",
+            provider = "Google Gemini",
+            tokenCostRate = "🟢 Ultra Düşük (~0.3x Token Tüketimi)",
+            badgeColor = Color(0xFF00BCD4),
+            description = "Ultra seri yanıt süresi ve minimum token tüketimi. Sohbet hafızasını ekonomik şekilde kullanır."
+        ),
+        ModelSpec(
+            key = "gemini-2.5-pro",
+            name = "Gemini 2.5 Pro",
+            provider = "Google Gemini",
+            tokenCostRate = "🔴 Yüksek (~2.5x Token Tüketimi)",
+            badgeColor = Color(0xFFE91E63),
+            description = "Üst düzey zeka, derin kurgu ve detaylı roman kalitesinde tutarlı karakter anlatımı."
+        ),
+        ModelSpec(
+            key = "llama-3.3-70b-versatile",
+            name = "Groq Llama 3.3 70B",
+            provider = "Groq API",
+            tokenCostRate = "🟡 Orta (~1.0x Token Tüketimi)",
+            badgeColor = Color(0xFFFF9800),
+            description = "Groq sunucularında ultra hızlı yanıt süresi ve doğal Türkçe rol yapma kabiliyeti."
+        ),
+        ModelSpec(
+            key = "deepseek-r1-distill-llama-70b",
+            name = "Groq DeepSeek R1",
+            provider = "Groq API",
+            tokenCostRate = "🔴 Yüksek (~2.0x Token Tüketimi)",
+            badgeColor = Color(0xFF9C27B0),
+            description = "Derin mantık ve karmaşık kurgu senaryolarında akıl yürütme odaklı karakter yanıtları."
+        ),
+        ModelSpec(
+            key = "claude-3-5-sonnet-20241022",
+            name = "Claude 3.5 Sonnet",
+            provider = "Anthropic",
+            tokenCostRate = "🔴 Çok Yüksek (~3.0x Token Tüketimi)",
+            badgeColor = Color(0xFFF44336),
+            description = "Edebi anlatım, yüksek duygusal derinlik ve roman kalitesinde akıcı diyaloglar."
+        ),
+        ModelSpec(
+            key = "claude-3-5-haiku-20241022",
+            name = "Claude 3.5 Haiku",
+            provider = "Anthropic",
+            tokenCostRate = "🟡 Orta (~1.2x Token Tüketimi)",
+            badgeColor = Color(0xFFFFC107),
+            description = "Hızlı ve seri Claude kalitesi. Kısa ve orta boy diyaloglar için ideal."
+        ),
+        ModelSpec(
+            key = "gpt-4o-mini",
+            name = "OpenAI GPT-4o Mini",
+            provider = "OpenAI",
+            tokenCostRate = "🟢 Düşük (~0.8x Token Tüketimi)",
+            badgeColor = Color(0xFF4CAF50),
+            description = "Ekonomik, tutarlı ve akıcı OpenAI sohbet altyapısı."
+        ),
+        ModelSpec(
+            key = "deepseek-chat",
+            name = "DeepSeek V3",
+            provider = "DeepSeek",
+            tokenCostRate = "🟢 Düşük (~0.6x Token Tüketimi)",
+            badgeColor = Color(0xFF009688),
+            description = "Bütçe dostu, geniş bağlamlı yüksek akıl yürütme gücü sunan model."
+        )
     )
+
+    val modelsMap = modelsList.associate { it.key to "${it.name} [${it.tokenCostRate}]" }
 
     var modelDropdownExpanded by remember { mutableStateOf(false) }
     var fallbackDropdownExpanded by remember { mutableStateOf(false) }
@@ -280,8 +413,9 @@ fun GlobalSettingsModal(
                         .fillMaxWidth()
                         .padding(top = 4.dp)
                 ) {
+                    val currentSpec = modelsList.find { it.key == selectedModel } ?: modelsList.first()
                     OutlinedTextField(
-                        value = modelsMap[selectedModel] ?: selectedModel,
+                        value = "${currentSpec.name} — ${currentSpec.tokenCostRate}",
                         onValueChange = {},
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelDropdownExpanded) },
@@ -293,13 +427,56 @@ fun GlobalSettingsModal(
                     ExposedDropdownMenu(
                         expanded = modelDropdownExpanded,
                         onDismissRequest = { modelDropdownExpanded = false },
-                        modifier = Modifier.background(EmochiCard)
+                        modifier = Modifier
+                            .background(EmochiCard)
+                            .padding(vertical = 4.dp)
                     ) {
-                        modelsMap.forEach { (modelKey, label) ->
+                        modelsList.forEach { spec ->
                             DropdownMenuItem(
-                                text = { Text(label, color = EmochiTextPrimary, fontSize = 12.sp) },
+                                text = {
+                                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = spec.name,
+                                                color = EmochiTextPrimary,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(spec.badgeColor.copy(alpha = 0.2f))
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = spec.provider,
+                                                    color = spec.badgeColor,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "Token Miktarı: ${spec.tokenCostRate}",
+                                            color = EmochiPrimary,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = spec.description,
+                                            color = EmochiTextMuted,
+                                            fontSize = 10.5.sp,
+                                            maxLines = 2
+                                        )
+                                    }
+                                },
                                 onClick = {
-                                    selectedModel = modelKey
+                                    selectedModel = spec.key
                                     modelDropdownExpanded = false
                                 }
                             )
@@ -307,7 +484,45 @@ fun GlobalSettingsModal(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                // Selected Model Details Info Box
+                val currentSelectedSpec = modelsList.find { it.key == selectedModel } ?: modelsList.first()
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = EmochiSurface),
+                    shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, currentSelectedSpec.badgeColor.copy(alpha = 0.4f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "🎯 Seçili Model Özellikleri",
+                                color = EmochiTextPrimary,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = currentSelectedSpec.tokenCostRate,
+                                color = currentSelectedSpec.badgeColor,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = currentSelectedSpec.description,
+                            color = EmochiTextSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Fallback Model
                 Text(text = "Yedek Model (Hata / Kota Aşımında Geçilir)", color = EmochiTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
@@ -318,8 +533,9 @@ fun GlobalSettingsModal(
                         .fillMaxWidth()
                         .padding(top = 4.dp)
                 ) {
+                    val currentFallbackSpec = modelsList.find { it.key == fallbackModel } ?: modelsList.first()
                     OutlinedTextField(
-                        value = modelsMap[fallbackModel] ?: fallbackModel,
+                        value = "${currentFallbackSpec.name} — ${currentFallbackSpec.tokenCostRate}",
                         onValueChange = {},
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = fallbackDropdownExpanded) },
@@ -333,11 +549,25 @@ fun GlobalSettingsModal(
                         onDismissRequest = { fallbackDropdownExpanded = false },
                         modifier = Modifier.background(EmochiCard)
                     ) {
-                        modelsMap.forEach { (modelKey, label) ->
+                        modelsList.forEach { spec ->
                             DropdownMenuItem(
-                                text = { Text(label, color = EmochiTextPrimary, fontSize = 12.sp) },
+                                text = {
+                                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                        Text(
+                                            text = "${spec.name} (${spec.provider})",
+                                            color = EmochiTextPrimary,
+                                            fontSize = 12.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "Tüketim: ${spec.tokenCostRate}",
+                                            color = EmochiPrimary,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                },
                                 onClick = {
-                                    fallbackModel = modelKey
+                                    fallbackModel = spec.key
                                     fallbackDropdownExpanded = false
                                 }
                             )
@@ -471,6 +701,40 @@ fun GlobalSettingsModal(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
+                // İÇERİK FİLTRELERİ (NSFW) Section (Matching Screenshot 1)
+                Text(
+                    text = "İÇERİK FİLTRELERİ (NSFW)",
+                    color = Color(0xFFE53935),
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1A141A)),
+                    shape = RoundedCornerShape(16.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF33202E)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(vertical = 4.dp, horizontal = 12.dp)) {
+                        FilterToggleRow(label = "🔓  18+ (NSFW) Kilidini Aç", checked = enableNsfw) { enableNsfw = it }
+                        Divider(color = Color(0xFF2D1E2A))
+                        FilterToggleRow(label = "💖  Çapkınlık (Flirty)", checked = enableFlirty) { enableFlirty = it }
+                        Divider(color = Color(0xFF2D1E2A))
+                        FilterToggleRow(label = "🔥  Sert Mod (Hardcore)", checked = enableHardcore) { enableHardcore = it }
+                        Divider(color = Color(0xFF2D1E2A))
+                        FilterToggleRow(label = "🎭  Fantezi (Fetish)", checked = enableFetish) { enableFetish = it }
+                        Divider(color = Color(0xFF2D1E2A))
+                        FilterToggleRow(label = "👻  Karanlık (Dark RP)", checked = enableDarkRp) { enableDarkRp = it }
+                        Divider(color = Color(0xFF2D1E2A))
+                        FilterToggleRow(label = "🍬  Romantik (Sweet)", checked = enableSweet) { enableSweet = it }
+                        Divider(color = Color(0xFF2D1E2A))
+                        FilterToggleRow(label = "🐾  Vahşi (Primal)", checked = enablePrimal) { enablePrimal = it }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
                 Button(
                     onClick = {
                         onSaveSettings(
@@ -484,6 +748,12 @@ fun GlobalSettingsModal(
                                 fallbackModel = fallbackModel,
                                 responseLength = responseLength,
                                 enableNsfw = enableNsfw,
+                                enableFlirty = enableFlirty,
+                                enableHardcore = enableHardcore,
+                                enableFetish = enableFetish,
+                                enableDarkRp = enableDarkRp,
+                                enableSweet = enableSweet,
+                                enablePrimal = enablePrimal,
                                 enableAutoFallback = enableAutoFallback,
                                 enableTts = enableTts
                             )
@@ -502,15 +772,15 @@ fun GlobalSettingsModal(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Export / Import section
-                Text(text = "Yedekleme & Geri Yükleme (JSON)", color = EmochiTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(text = "Yedekleme & Geri Yükleme (JSON / Dosya)", color = EmochiTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    text = "Tüm botlarınızı ve sohbet geçmişinizi JSON olarak dışa aktarabilir veya yedekten geri yükleyebilirsiniz.",
+                    text = "Tüm botlarınızı ve sohbet geçmişinizi yedekleyin, dosyaya aktarın veya hazır karakter/yedek dosyalarını geri yükleyin.",
                     color = EmochiTextSecondary,
                     fontSize = 11.5.sp,
                     modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
                 )
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Button(
                         onClick = {
                             scope.launch {
@@ -520,7 +790,7 @@ fun GlobalSettingsModal(
                                     exportJson = json
                                     clipboardManager.setText(AnnotatedString(json))
                                     Toast.makeText(context, "Yedek panoya kopyalandı!", Toast.LENGTH_SHORT).show()
-                                    statusMessage = "Yedek verisi panoya kopyalandı."
+                                    statusMessage = "Yedek kopyalandı."
                                 } catch (e: Exception) {
                                     statusMessage = "Hata: ${e.message}"
                                 } finally {
@@ -532,7 +802,46 @@ fun GlobalSettingsModal(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Dışa Aktar", color = EmochiPrimary, fontSize = 12.5.sp)
+                        Text("📋 Kopyala", color = EmochiPrimary, fontSize = 11.5.sp)
+                    }
+
+                    Button(
+                        onClick = {
+                            saveFileLauncher.launch("emochi_backup_${System.currentTimeMillis() / 1000}.json")
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = EmochiCard),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("💾 Kaydet", color = EmochiPrimary, fontSize = 11.5.sp)
+                    }
+
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                isBusy = true
+                                try {
+                                    val json = if (exportJson.isNotBlank()) exportJson else onExportData()
+                                    exportJson = json
+                                    val sendIntent = Intent().apply {
+                                        action = Intent.ACTION_SEND
+                                        putExtra(Intent.EXTRA_TEXT, json)
+                                        type = "text/plain"
+                                    }
+                                    val shareIntent = Intent.createChooser(sendIntent, "Yedeği Paylaş")
+                                    context.startActivity(shareIntent)
+                                } catch (e: Exception) {
+                                    statusMessage = "Paylaşım hatası: ${e.message}"
+                                } finally {
+                                    isBusy = false
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = EmochiCard),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("📤 Paylaş", color = EmochiPrimary, fontSize = 11.5.sp)
                     }
                 }
 
@@ -543,23 +852,54 @@ fun GlobalSettingsModal(
                         readOnly = true,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(100.dp)
+                            .height(90.dp)
                             .padding(top = 8.dp),
                         colors = customTextFieldColors()
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                Text(text = "Geri Yükle", color = EmochiTextPrimary, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                Text(text = "Geri Yükle & Karakter Yükle", color = EmochiTextPrimary, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Button(
+                        onClick = { filePickerLauncher.launch("application/json") },
+                        colors = ButtonDefaults.buttonColors(containerColor = EmochiPrimary, contentColor = Color(0xFF1A1B2E)),
+                        modifier = Modifier.weight(1.2f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("📂 Dosya Seç (.json)", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = {
+                            clipboardManager.getText()?.let { text ->
+                                importJson = text.text
+                                Toast.makeText(context, "Metin panodan yapıştırıldı!", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = EmochiCard),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("📋 Yapıştır", color = EmochiPrimary, fontSize = 11.5.sp)
+                    }
+                }
+
                 OutlinedTextField(
                     value = importJson,
                     onValueChange = { importJson = it },
-                    placeholder = { Text("Yedek JSON metnini buraya yapıştırın...", fontSize = 12.sp, color = EmochiTextMuted) },
+                    placeholder = { Text("Yedek JSON veya karakter verisini yapıştırın...", fontSize = 12.sp, color = EmochiTextMuted) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(100.dp)
-                        .padding(top = 4.dp),
+                        .height(90.dp)
+                        .padding(top = 6.dp),
                     colors = customTextFieldColors()
                 )
 
@@ -571,7 +911,7 @@ fun GlobalSettingsModal(
                             try {
                                 onImportData(importJson)
                                 Toast.makeText(context, "Geri yükleme tamamlandı!", Toast.LENGTH_SHORT).show()
-                                statusMessage = "Tüm botlar ve sohbetler başarıyla aktarıldı."
+                                statusMessage = "Tüm botlar ve veriler başarıyla yüklendi."
                                 importJson = ""
                             } catch (e: Exception) {
                                 statusMessage = "İçe aktarma hatası: ${e.message}"
@@ -580,14 +920,14 @@ fun GlobalSettingsModal(
                             }
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = EmochiCard),
+                    colors = ButtonDefaults.buttonColors(containerColor = EmochiPrimary, contentColor = Color(0xFF1A1B2E)),
                     enabled = importJson.isNotBlank() && !isBusy,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 6.dp),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("İçe Aktar", color = EmochiPrimary, fontSize = 12.5.sp)
+                    Text("✅ İçe Aktarımı Başlat", fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
                 }
 
                 statusMessage?.let { msg ->
@@ -617,6 +957,7 @@ fun BotSettingsModal(
     var intensity by remember { mutableStateOf(bot.intensity) }
     var customLength by remember { mutableStateOf(bot.customLength) }
     var isNsfw by remember { mutableStateOf(bot.isNsfw) }
+    var avatarUrl by remember { mutableStateOf(bot.avatarUrl) }
     var pinnedMemory by remember { mutableStateOf(bot.pinnedMemory) }
     var storyNotes by remember { mutableStateOf(bot.storyNotes) }
     var memoryNotes by remember { mutableStateOf(bot.memoryNotes) }
@@ -625,6 +966,13 @@ fun BotSettingsModal(
 
     var confirmResetChat by remember { mutableStateOf(false) }
     var confirmDeleteBot by remember { mutableStateOf(false) }
+    var showNeuralVault by remember { mutableStateOf(false) }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { avatarUrl = it.toString() }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -652,6 +1000,97 @@ fun BotSettingsModal(
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
+
+                // Avatar Photo Picker UI
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = EmochiCard),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, EmochiBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(58.dp)
+                                .clip(RoundedCornerShape(29.dp))
+                                .background(Color(0xFF252535)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (avatarUrl.isNotBlank()) {
+                                AsyncImage(
+                                    model = avatarUrl,
+                                    contentDescription = "Bot Avatar",
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Icon(Icons.Default.PhotoCamera, contentDescription = null, tint = EmochiPrimary, modifier = Modifier.size(24.dp))
+                            }
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Bot Görseli / Fotoğrafı", color = EmochiTextPrimary, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                            Text("Galeriden veya URL ile kapak resmi yükle", color = EmochiTextMuted, fontSize = 11.sp)
+                            
+                            Row(modifier = Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Button(
+                                    onClick = { photoPickerLauncher.launch("image/*") },
+                                    colors = ButtonDefaults.buttonColors(containerColor = EmochiPrimary, contentColor = Color(0xFF1A1B2E)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.height(30.dp)
+                                ) {
+                                    Text("Galeri", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                if (avatarUrl.isNotBlank()) {
+                                    TextButton(
+                                        onClick = { avatarUrl = "" },
+                                        modifier = Modifier.height(30.dp)
+                                    ) {
+                                        Text("Kaldır", fontSize = 11.sp, color = EmochiError)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Neural Vault Button (Screenshot 2 Trigger)
+                Button(
+                    onClick = { showNeuralVault = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF141424), contentColor = Color(0xFF2196F3)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2196F3).copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Psychology, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("🧠 Neural Vault (Gelişmiş AI Belleği)", fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
+                }
+
+                if (showNeuralVault) {
+                    NeuralVaultModal(
+                        bot = bot.copy(
+                            pinnedMemory = pinnedMemory,
+                            storyNotes = storyNotes,
+                            memoryNotes = memoryNotes
+                        ),
+                        onDismiss = { showNeuralVault = false },
+                        onSaveMemory = { updatedBot ->
+                            pinnedMemory = updatedBot.pinnedMemory
+                            storyNotes = updatedBot.storyNotes
+                            memoryNotes = updatedBot.memoryNotes
+                        }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 if (bot.mode == "personal") {
                     Text("Karakter Adı", color = EmochiTextPrimary, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
@@ -872,6 +1311,7 @@ fun BotSettingsModal(
                             intensity = intensity,
                             customLength = customLength,
                             isNsfw = isNsfw,
+                            avatarUrl = avatarUrl,
                             pinnedMemory = pinnedMemory,
                             updatedAt = System.currentTimeMillis()
                         )
@@ -977,3 +1417,306 @@ fun customTextFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedTextColor = EmochiTextPrimary,
     unfocusedTextColor = EmochiTextPrimary
 )
+
+@Composable
+fun FilterToggleRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            color = Color.White,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = Color(0xFF4CAF50),
+                uncheckedThumbColor = Color(0xFFB0B0B0),
+                uncheckedTrackColor = Color(0xFF333333)
+            )
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NeuralVaultModal(
+    bot: BotEntity,
+    onDismiss: () -> Unit,
+    onSaveMemory: (BotEntity) -> Unit
+) {
+    var keyword by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf("Bilgi (Core)") }
+    var memoryText by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
+    
+    var pinnedMemoryText by remember { mutableStateOf(bot.pinnedMemory) }
+    
+    val memoriesList = remember(pinnedMemoryText) {
+        if (pinnedMemoryText.isBlank()) emptyList()
+        else {
+            pinnedMemoryText.lines().filter { it.isNotBlank() }.map { line ->
+                val parts = line.split(":::", limit = 3)
+                if (parts.size >= 3) {
+                    Triple(parts[0].trim(), parts[1].trim(), parts[2].trim())
+                } else if (parts.size == 2) {
+                    Triple("BELLEK", "BİLGİ", parts[1].trim())
+                } else {
+                    Triple("GENEL", "BİLGİ", line.trim())
+                }
+            }
+        }
+    }
+    
+    val filteredMemories = memoriesList.filter { (key, cat, body) ->
+        searchQuery.isBlank() || key.contains(searchQuery, ignoreCase = true) ||
+                cat.contains(searchQuery, ignoreCase = true) ||
+                body.contains(searchQuery, ignoreCase = true)
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F0F14)),
+            shape = RoundedCornerShape(20.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2A2A38)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                // Header (Matching Screenshot 2)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Neural Vault",
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Kapat", tint = Color.Gray)
+                    }
+                }
+
+                // Stats Pills Row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp, bottom = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFF1E1E28), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text("${memoriesList.size} Kayıt", color = Color.LightGray, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFF1E1E28), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text("V4.0 Sync", color = Color.LightGray, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFF1E1E28), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text("Long-Term Memory", color = Color.LightGray, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+
+                // Inject Memory Box
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF14141E)),
+                    shape = RoundedCornerShape(16.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF252535)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Add, contentDescription = null, tint = Color(0xFF2196F3), modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "YENİ BELLEK ENJEKTE ET",
+                                color = Color(0xFF2196F3),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = keyword,
+                                onValueChange = { keyword = it },
+                                placeholder = { Text("Anahtar Kelime", color = Color.Gray, fontSize = 11.5.sp) },
+                                modifier = Modifier.weight(1f),
+                                colors = customTextFieldColors(),
+                                singleLine = true
+                            )
+                            OutlinedTextField(
+                                value = category,
+                                onValueChange = { category = it },
+                                placeholder = { Text("Bilgi (Core)", color = Color.Gray, fontSize = 11.5.sp) },
+                                modifier = Modifier.weight(1f),
+                                colors = customTextFieldColors(),
+                                singleLine = true
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedTextField(
+                            value = memoryText,
+                            onValueChange = { memoryText = it },
+                            placeholder = { Text("Karakter neyi hatırlamalı? (Örn: En sevdiği yemek makarnadır.)", color = Color.Gray, fontSize = 12.sp) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(85.dp),
+                            colors = customTextFieldColors()
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            onClick = {
+                                if (memoryText.isNotBlank()) {
+                                    val keyTag = keyword.ifBlank { "BELLEK" }.uppercase()
+                                    val catTag = category.ifBlank { "BİLGİ" }.uppercase()
+                                    val newEntry = "$keyTag ::: $catTag ::: ${memoryText.trim()}"
+                                    val newPinned = if (pinnedMemoryText.isBlank()) newEntry else "$pinnedMemoryText\n$newEntry"
+                                    pinnedMemoryText = newPinned
+                                    onSaveMemory(bot.copy(pinnedMemory = newPinned))
+                                    keyword = ""
+                                    memoryText = ""
+                                }
+                            },
+                            enabled = memoryText.isNotBlank(),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3), contentColor = Color.White),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Belleği Kaydet", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Search Bar
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Hafızada ara...", color = Color.Gray, fontSize = 12.sp) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = customTextFieldColors(),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Saved Memory List Cards
+                if (filteredMemories.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Henüz enjekte edilmiş bellek yok.", color = Color.Gray, fontSize = 12.sp)
+                    }
+                } else {
+                    filteredMemories.forEachIndexed { index, (keyTag, catTag, bodyText) ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF14141E)),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF252535)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = keyTag,
+                                        color = Color.White,
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .background(Color(0xFF252535), RoundedCornerShape(6.dp))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = catTag,
+                                            color = Color.LightGray,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = bodyText,
+                                    color = Color(0xFFD0D0E0),
+                                    fontSize = 12.sp
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    IconButton(
+                                        onClick = {
+                                            val lines = pinnedMemoryText.lines().toMutableList()
+                                            val targetLine = "$keyTag ::: $catTag ::: $bodyText"
+                                            lines.remove(targetLine)
+                                            val updated = lines.joinToString("\n")
+                                            pinnedMemoryText = updated
+                                            onSaveMemory(bot.copy(pinnedMemory = updated))
+                                        },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Sil", tint = Color(0xFFE53935), modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
