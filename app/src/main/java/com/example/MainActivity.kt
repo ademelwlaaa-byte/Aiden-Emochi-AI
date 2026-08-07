@@ -58,6 +58,7 @@ fun EmochiAppMain(viewModel: EmochiViewModel) {
     val activeBot by viewModel.activeBot.collectAsStateWithLifecycle()
     val activeMessages by viewModel.activeMessages.collectAsStateWithLifecycle()
     val isSending by viewModel.isSending.collectAsStateWithLifecycle()
+    val isSpeaking by viewModel.isSpeaking.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
 
     AnimatedContent(
@@ -132,7 +133,11 @@ fun EmochiAppMain(viewModel: EmochiViewModel) {
                         },
                         onResetChat = { viewModel.resetChat(currentBot.id) },
                         onDeleteBot = { viewModel.deleteBot(currentBot.id) },
-                        onSpeakText = { text -> viewModel.speakText(text) }
+                        onSpeakText = { text -> viewModel.speakText(text) },
+                        isSpeaking = isSpeaking,
+                        onStopSpeaking = { viewModel.stopSpeaking() },
+                        onEnsureOpeningMessage = { viewModel.ensureOpeningMessageForActiveBot() },
+                        onClearError = { viewModel.clearError() }
                     )
                 }
             }

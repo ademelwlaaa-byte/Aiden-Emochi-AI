@@ -80,6 +80,9 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    private val _isSpeaking = MutableStateFlow(false)
+    val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
+
     private var tts: TextToSpeech? = null
 
     init {
@@ -90,6 +93,18 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
         try {
             tts = TextToSpeech(application) { status ->
                 if (status == TextToSpeech.SUCCESS) {
+                    tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                        override fun onStart(utteranceId: String?) {
+                            _isSpeaking.value = true
+                        }
+                        override fun onDone(utteranceId: String?) {
+                            _isSpeaking.value = false
+                        }
+                        @Deprecated("Deprecated in Java")
+                        override fun onError(utteranceId: String?) {
+                            _isSpeaking.value = false
+                        }
+                    })
                     val result = tts?.setLanguage(Locale("tr", "TR"))
                     if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                         tts?.setLanguage(Locale.getDefault())
@@ -101,58 +116,100 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun speakText(text: String) {
-        val cleanText = text.replace(Regex("\\*.*?\\*"), "")
-        tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "EmochiTTS")
+    fun speakText(text: String, speed: Float? = null, pitch: Float? = null) {
+        val settings = userSettings.value
+        val effSpeed = speed ?: settings?.ttsSpeed ?: 1.0f
+        val effPitch = pitch ?: settings?.ttsPitch ?: 1.0f
+        tts?.setSpeechRate(effSpeed)
+        tts?.setPitch(effPitch)
+
+        val voiceName = settings?.selectedVoiceName ?: ""
+        if (voiceName.isNotBlank()) {
+            try {
+                tts?.voices?.firstOrNull { it.name == voiceName }?.let { voice ->
+                    tts?.voice = voice
+                }
+            } catch (_: Exception) {}
+        }
+
+        val cleanText = text.replace(Regex("\\*.*?\\*"), "").trim()
+        if (cleanText.isNotBlank()) {
+            _isSpeaking.value = true
+            tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "EmochiTTS")
+        }
     }
 
     fun stopSpeaking() {
         tts?.stop()
+        _isSpeaking.value = false
     }
 
     override fun onCleared() {
         super.onCleared()
-        tts?.stop()
+        stopSpeaking()
         tts?.shutdown()
     }
 
     fun openMenu() {
+        stopSpeaking()
         _errorMessage.value = null
         _activeBotId.value = null
         _uiState.value = UiState.Menu
     }
 
     fun startWizard() {
+        stopSpeaking()
         _errorMessage.value = null
         _uiState.value = UiState.SetupWizard
     }
 
     fun openBot(botId: String) {
+        stopSpeaking()
         _errorMessage.value = null
-        _activeBotId.value = botId
+        if (_activeBotId.value != botId) {
+            _activeBotId.value = botId
+        }
         _uiState.value = UiState.Chat(botId)
 
         viewModelScope.launch {
+            ensureOpeningMessage(botId)
+        }
+    }
+
+    fun ensureOpeningMessageForActiveBot() {
+        val botId = _activeBotId.value ?: return
+        viewModelScope.launch {
+            ensureOpeningMessage(botId)
+        }
+    }
+
+    suspend fun ensureOpeningMessage(botId: String) {
+        var bot = repository.getBot(botId)
+        var retryCount = 0
+        while (bot == null && retryCount < 5) {
+            kotlinx.coroutines.delay(100)
+            bot = repository.getBot(botId)
+            retryCount++
+        }
+
+        if (bot != null) {
             val existingMsgs = repository.getMessageListForBot(botId)
             if (existingMsgs.isEmpty()) {
-                val bot = repository.getBot(botId)
-                if (bot != null) {
-                    val openingText = bot.openingMessage.ifBlank {
-                        if (bot.mode == "universe") {
-                            "*Sahne başlar. Çevre sakin ve atmosferik bir hava bürünmüştür.*\n\n\"Hikayemize nereden başlamak istersin?\""
-                        } else {
-                            "Merhaba! Seni seve seve dinliyorum, ne hakkında konuşmak istersin?"
-                        }
+                val openingText = bot.openingMessage.ifBlank {
+                    if (bot.mode == "universe") {
+                        "*Sahne başlar. Çevre sakin ve atmosferik bir havaya bürünmüştür.*\n\n\"Hikayemize nereden başlamak istersin?\""
+                    } else {
+                        "Merhaba! Seni seve seve dinliyorum, ne hakkında konuşmak istersin?"
                     }
-                    val openingMsg = MessageEntity(
-                        id = UUID.randomUUID().toString(),
-                        botId = bot.id,
-                        role = "assistant",
-                        text = openingText,
-                        timestamp = System.currentTimeMillis()
-                    )
-                    repository.saveMessage(openingMsg)
                 }
+                val openingMsg = MessageEntity(
+                    id = UUID.randomUUID().toString(),
+                    botId = bot.id,
+                    role = "assistant",
+                    text = openingText,
+                    timestamp = System.currentTimeMillis()
+                )
+                repository.saveMessage(openingMsg)
             }
         }
     }

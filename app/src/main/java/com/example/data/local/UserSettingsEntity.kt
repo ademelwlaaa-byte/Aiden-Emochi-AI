@@ -24,6 +24,9 @@ data class UserSettingsEntity(
     val enablePrimal: Boolean = false, // Vahşi (Primal)
     val enableAutoFallback: Boolean = true,
     val enableTts: Boolean = true,
+    val ttsSpeed: Float = 1.0f,
+    val ttsPitch: Float = 1.0f,
+    val selectedVoiceName: String = "",
     val totalPromptTokens: Long = 0L,
     val totalCandidateTokens: Long = 0L
 )

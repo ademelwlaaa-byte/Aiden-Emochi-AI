@@ -126,6 +126,9 @@ fun GlobalSettingsModal(
     var enablePrimal by remember { mutableStateOf(settings.enablePrimal) }
     var enableAutoFallback by remember { mutableStateOf(settings.enableAutoFallback) }
     var enableTts by remember { mutableStateOf(settings.enableTts) }
+    var ttsSpeed by remember { mutableStateOf(settings.ttsSpeed) }
+    var ttsPitch by remember { mutableStateOf(settings.ttsPitch) }
+    var selectedVoiceName by remember { mutableStateOf(settings.selectedVoiceName) }
 
     var showKeys by remember { mutableStateOf(false) }
 
@@ -688,7 +691,7 @@ fun GlobalSettingsModal(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Sesli Okuma (Text-To-Speech)", color = EmochiTextPrimary, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
-                        Text("Yanıtlara sesli okuma butonu ekle.", color = EmochiTextSecondary, fontSize = 11.sp)
+                        Text("Yanıtlara sesli okuma butonu ekle ve okuma hızını ayarla.", color = EmochiTextSecondary, fontSize = 11.sp)
                     }
                     Switch(
                         checked = enableTts,
@@ -698,6 +701,74 @@ fun GlobalSettingsModal(
                             checkedTrackColor = EmochiPrimary
                         )
                     )
+                }
+
+                if (enableTts) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .background(EmochiCard, RoundedCornerShape(12.dp))
+                            .border(1.dp, EmochiBorder, RoundedCornerShape(12.dp))
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "⚡ Okuma Hızı: ${"%.1f".format(ttsSpeed)}x",
+                            color = EmochiTextPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(0.8f to "0.8x (Yavaş)", 1.0f to "1.0x (Normal)", 1.25f to "1.25x (Hızlı)", 1.5f to "1.5x (Çok Hızlı)").forEach { (sp, lbl) ->
+                                val sel = ttsSpeed == sp
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (sel) EmochiPrimary.copy(alpha = 0.25f) else EmochiSurface)
+                                        .border(1.dp, if (sel) EmochiPrimary else EmochiBorder, RoundedCornerShape(8.dp))
+                                        .clickable { ttsSpeed = sp }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(lbl, color = if (sel) EmochiPrimary else EmochiTextSecondary, fontSize = 10.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = "🎵 Ses Tonu (Pitch): ${"%.1f".format(ttsPitch)}x",
+                            color = EmochiTextPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(0.8f to "Kalın (0.8x)", 1.0f to "Normal (1.0x)", 1.2f to "İnce (1.2x)").forEach { (p, lbl) ->
+                                val sel = ttsPitch == p
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (sel) EmochiPrimary.copy(alpha = 0.25f) else EmochiSurface)
+                                        .border(1.dp, if (sel) EmochiPrimary else EmochiBorder, RoundedCornerShape(8.dp))
+                                        .clickable { ttsPitch = p }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(lbl, color = if (sel) EmochiPrimary else EmochiTextSecondary, fontSize = 10.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
+                                }
+                            }
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(18.dp))
@@ -756,7 +827,10 @@ fun GlobalSettingsModal(
                                 enableSweet = enableSweet,
                                 enablePrimal = enablePrimal,
                                 enableAutoFallback = enableAutoFallback,
-                                enableTts = enableTts
+                                enableTts = enableTts,
+                                ttsSpeed = ttsSpeed,
+                                ttsPitch = ttsPitch,
+                                selectedVoiceName = selectedVoiceName
                             )
                         )
                         onDismiss()

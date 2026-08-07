@@ -28,8 +28,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
@@ -47,11 +49,15 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -87,6 +93,8 @@ import com.example.ui.theme.EmochiTextPrimary
 import com.example.ui.theme.EmochiTextSecondary
 import com.example.ui.theme.EmochiUserBubbleText
 
+import androidx.compose.runtime.DisposableEffect
+
 @Composable
 fun ChatScreen(
     bot: BotEntity,
@@ -103,7 +111,11 @@ fun ChatScreen(
     onSaveBotProfile: (BotEntity, List<KeyCharacter>) -> Unit,
     onResetChat: () -> Unit,
     onDeleteBot: () -> Unit,
-    onSpeakText: ((String) -> Unit)? = null
+    onSpeakText: ((String) -> Unit)? = null,
+    isSpeaking: Boolean = false,
+    onStopSpeaking: () -> Unit = {},
+    onEnsureOpeningMessage: () -> Unit = {},
+    onClearError: () -> Unit = {}
 ) {
     var inputText by remember { mutableStateOf("") }
     var showBotSettings by remember { mutableStateOf(false) }
@@ -113,14 +125,29 @@ fun ChatScreen(
     var editingText by remember { mutableStateOf("") }
 
     val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
 
-    // Scroll to bottom on new messages, last message change, or typing state
-    val lastMsgId = messages.lastOrNull()?.id
-    val lastMsgLength = messages.lastOrNull()?.text?.length ?: 0
-    LaunchedEffect(messages.size, lastMsgId, lastMsgLength, isSending) {
+    // STOP SPEAKING IMMEDIATELY WHEN EXITING CHAT
+    DisposableEffect(Unit) {
+        onDispose {
+            onStopSpeaking()
+        }
+    }
+
+    // Automatically ensure opening message exists if list is empty (run once per bot)
+    LaunchedEffect(bot.id) {
+        if (messages.isEmpty()) {
+            onEnsureOpeningMessage()
+        }
+    }
+
+    // Scroll to bottom on new messages or typing state change
+    LaunchedEffect(messages.size, isSending) {
         val totalItems = messages.size + if (isSending) 1 else 0
         if (totalItems > 0) {
-            listState.animateScrollToItem(totalItems - 1)
+            try {
+                listState.animateScrollToItem(totalItems - 1)
+            } catch (_: Exception) {}
         }
     }
 
@@ -253,6 +280,32 @@ fun ChatScreen(
                         Text("$approxTokens hafıza", color = EmochiTextMuted, fontSize = 11.sp)
                     }
                 }
+
+                if (isSpeaking) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF2A1C38))
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "🔊 Sesli okunuyor...",
+                                color = EmochiPrimary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        TextButton(
+                            onClick = onStopSpeaking,
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        ) {
+                            Text("⏹️ Okumayı Durdur", color = EmochiPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
         },
         bottomBar = {
@@ -368,159 +421,233 @@ fun ChatScreen(
             }
         }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            errorMessage?.let { err ->
-                Row(
+            Column(modifier = Modifier.fillMaxSize()) {
+                errorMessage?.let { err ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF3A1414))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(err, color = EmochiError, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                        IconButton(
+                            onClick = onClearError,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Hatayı Kapat", tint = EmochiError, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+
+                LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF3A1414))
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .weight(1f)
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(err, color = EmochiError, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                }
-            }
-
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                itemsIndexed(messages, key = { idx, msg -> "${msg.id}_$idx" }) { idx, msg ->
-                    val isUser = msg.role == "user"
-                    val isLastAi = !isUser && idx == lastAiIndex
-
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
-                    ) {
-                        if (editingMessageId == msg.id) {
-                            // Edit box
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = EmochiCard),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, EmochiPrimary),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth(0.85f)
+                    if (messages.isEmpty() && !isSending) {
+                        item(key = "empty_placeholder_card") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 24.dp),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Column(modifier = Modifier.padding(8.dp)) {
-                                    OutlinedTextField(
-                                        value = editingText,
-                                        onValueChange = { editingText = it },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = customTextFieldColors()
-                                    )
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                                        horizontalArrangement = Arrangement.End
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = EmochiCard),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, EmochiBorder),
+                                    shape = RoundedCornerShape(16.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(20.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
-                                        TextButton(onClick = { editingMessageId = null }) {
-                                            Text("Vazgeç", color = EmochiTextMuted, fontSize = 12.sp)
-                                        }
+                                        Text(
+                                            text = "✨ $displayName henüz ilk mesajını göndermedi",
+                                            color = EmochiTextPrimary,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        )
+                                        Text(
+                                            text = "Aşağıdaki butona dokunarak karakterinizin selamlama mesajını başlatabilir veya hemen mesaj yazmaya başlayabilirsiniz.",
+                                            color = EmochiTextSecondary,
+                                            fontSize = 12.sp,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        )
                                         Button(
-                                            onClick = {
-                                                val text = editingText
-                                                editingMessageId = null
-                                                onEditMessage(msg.id, text)
-                                            },
+                                            onClick = onEnsureOpeningMessage,
                                             colors = ButtonDefaults.buttonColors(containerColor = EmochiPrimary)
                                         ) {
-                                            Text("Kaydet", color = Color(0xFF1A1B2E), fontSize = 12.sp)
+                                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF1A1B2E))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("👋 Karakter İlk Mesajını Yükle", color = Color(0xFF1A1B2E), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
                             }
-                        } else {
-                            // Bubble
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.82f)
-                                    .clip(
-                                        RoundedCornerShape(
-                                            topStart = 16.dp,
-                                            topEnd = 16.dp,
-                                            bottomStart = if (isUser) 16.dp else 4.dp,
-                                            bottomEnd = if (isUser) 4.dp else 16.dp
-                                        )
-                                    )
-                                    .background(
-                                        if (isUser) Brush.linearGradient(listOf(EmochiCoralStart, EmochiCoralEnd))
-                                        else Brush.linearGradient(listOf(EmochiCard, EmochiCard))
-                                    )
-                                    .border(
-                                        1.dp,
-                                        if (isUser) Color.Transparent else EmochiBorder,
-                                        RoundedCornerShape(
-                                            topStart = 16.dp,
-                                            topEnd = 16.dp,
-                                            bottomStart = if (isUser) 16.dp else 4.dp,
-                                            bottomEnd = if (isUser) 4.dp else 16.dp
-                                        )
-                                    )
-                                    .padding(horizontal = 14.dp, vertical = 10.dp)
-                            ) {
-                                Text(
-                                    text = msg.text,
-                                    color = if (isUser) EmochiUserBubbleText else EmochiTextPrimary,
-                                    fontSize = 14.sp,
-                                    lineHeight = 20.sp
-                                )
-                            }
+                        }
+                    } else {
+                        itemsIndexed(messages, key = { _, msg -> msg.id }) { idx, msg ->
+                        val isUser = msg.role == "user"
+                        val isLastAi = !isUser && idx == lastAiIndex
 
-                            // Message actions row
-                            val clipboardManager = LocalClipboardManager.current
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                modifier = Modifier.padding(top = 2.dp, bottom = 4.dp, start = 4.dp, end = 4.dp)
-                            ) {
-                                Text(
-                                    text = "Kopyala",
-                                    color = EmochiTextMuted,
-                                    fontSize = 10.5.sp,
-                                    modifier = Modifier.clickable {
-                                        clipboardManager.setText(AnnotatedString(msg.text))
+                        val timeFormatted = remember(msg.timestamp) {
+                            if (msg.timestamp > 0L) {
+                                val sdf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                                sdf.format(java.util.Date(msg.timestamp))
+                            } else ""
+                        }
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
+                        ) {
+                            if (editingMessageId == msg.id) {
+                                // Edit box
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = EmochiCard),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, EmochiPrimary),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth(0.85f)
+                                ) {
+                                    Column(modifier = Modifier.padding(8.dp)) {
+                                        OutlinedTextField(
+                                            value = editingText,
+                                            onValueChange = { editingText = it },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = customTextFieldColors()
+                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                                            horizontalArrangement = Arrangement.End
+                                        ) {
+                                            TextButton(onClick = { editingMessageId = null }) {
+                                                Text("Vazgeç", color = EmochiTextMuted, fontSize = 12.sp)
+                                            }
+                                            Button(
+                                                onClick = {
+                                                    val text = editingText
+                                                    editingMessageId = null
+                                                    onEditMessage(msg.id, text)
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = EmochiPrimary)
+                                            ) {
+                                                Text("Kaydet", color = Color(0xFF1A1B2E), fontSize = 12.sp)
+                                            }
+                                        }
                                     }
-                                )
-                                if (isUser) {
+                                }
+                            } else {
+                                // Bubble
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.82f)
+                                        .clip(
+                                            RoundedCornerShape(
+                                                topStart = 16.dp,
+                                                topEnd = 16.dp,
+                                                bottomStart = if (isUser) 16.dp else 4.dp,
+                                                bottomEnd = if (isUser) 4.dp else 16.dp
+                                            )
+                                        )
+                                        .background(
+                                            if (isUser) Brush.linearGradient(listOf(EmochiCoralStart, EmochiCoralEnd))
+                                            else Brush.linearGradient(listOf(EmochiCard, EmochiCard))
+                                        )
+                                        .border(
+                                            1.dp,
+                                            if (isUser) Color.Transparent else EmochiBorder,
+                                            RoundedCornerShape(
+                                                topStart = 16.dp,
+                                                topEnd = 16.dp,
+                                                bottomStart = if (isUser) 16.dp else 4.dp,
+                                                bottomEnd = if (isUser) 4.dp else 16.dp
+                                            )
+                                        )
+                                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = msg.text,
+                                            color = if (isUser) EmochiUserBubbleText else EmochiTextPrimary,
+                                            fontSize = 14.sp,
+                                            lineHeight = 20.sp
+                                        )
+                                        if (timeFormatted.isNotBlank()) {
+                                            Text(
+                                                text = timeFormatted,
+                                                color = if (isUser) EmochiUserBubbleText.copy(alpha = 0.7f) else EmochiTextMuted,
+                                                fontSize = 9.5.sp,
+                                                modifier = Modifier
+                                                    .align(Alignment.End)
+                                                    .padding(top = 4.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Message actions row
+                                val clipboardManager = LocalClipboardManager.current
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    modifier = Modifier.padding(top = 2.dp, bottom = 4.dp, start = 4.dp, end = 4.dp)
+                                ) {
                                     Text(
-                                        text = "Düzenle",
+                                        text = "Kopyala",
                                         color = EmochiTextMuted,
                                         fontSize = 10.5.sp,
                                         modifier = Modifier.clickable {
-                                            editingMessageId = msg.id
-                                            editingText = msg.text
+                                            clipboardManager.setText(AnnotatedString(msg.text))
                                         }
                                     )
-                                } else if (userSettings?.enableTts == true && onSpeakText != null) {
+                                    if (isUser) {
+                                        Text(
+                                            text = "Düzenle",
+                                            color = EmochiTextMuted,
+                                            fontSize = 10.5.sp,
+                                            modifier = Modifier.clickable {
+                                                editingMessageId = msg.id
+                                                editingText = msg.text
+                                            }
+                                        )
+                                    } else if (userSettings?.enableTts == true && onSpeakText != null) {
+                                        Text(
+                                            text = if (isSpeaking) "⏹️ Durdur" else "🔊 Sesli Oku",
+                                            color = EmochiPrimary,
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.clickable {
+                                                if (isSpeaking) onStopSpeaking() else onSpeakText(msg.text)
+                                            }
+                                        )
+                                    }
                                     Text(
-                                        text = "🔊 Sesli Oku",
-                                        color = EmochiPrimary,
+                                        text = "Sil",
+                                        color = EmochiTextMuted,
                                         fontSize = 10.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.clickable { onSpeakText(msg.text) }
+                                        modifier = Modifier.clickable { onDeleteMessage(msg.id) }
                                     )
-                                }
-                                Text(
-                                    text = "Sil",
-                                    color = EmochiTextMuted,
-                                    fontSize = 10.5.sp,
-                                    modifier = Modifier.clickable { onDeleteMessage(msg.id) }
-                                )
-                                if (isLastAi && !isSending) {
-                                    Text(
-                                        text = "Yeniden Oluştur",
-                                        color = EmochiPrimary,
-                                        fontSize = 10.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.clickable { onRegenerate() }
-                                    )
+                                    if (isLastAi && !isSending) {
+                                        Text(
+                                            text = "Yeniden Oluştur",
+                                            color = EmochiPrimary,
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.clickable { onRegenerate() }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -528,7 +655,7 @@ fun ChatScreen(
                 }
 
                 if (isSending) {
-                    item {
+                    item(key = "typing_dots_indicator") {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
                             Box(
                                 modifier = Modifier
@@ -543,8 +670,56 @@ fun ChatScreen(
                     }
                 }
             }
+
+            // Scroll to bottom floating button when scrolled up
+            val showScrollToBottom = remember {
+                derivedStateOf {
+                    listState.firstVisibleItemIndex > 2
+                }
+            }
+
+            if (showScrollToBottom.value) {
+                val totalCount = messages.size + if (isSending) 1 else 0
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp, end = 12.dp),
+                    contentAlignment = Alignment.CenterEnd
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(EmochiPrimary)
+                            .clickable {
+                                coroutineScope.launch {
+                                    if (totalCount > 0) {
+                                        listState.animateScrollToItem(totalCount - 1)
+                                    }
+                                }
+                            }
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = "En aşağı in",
+                                tint = Color(0xFF1A1B2E),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "En Aşağı İn",
+                                color = Color(0xFF1A1B2E),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
+}
 
     if (showBotSettings) {
         BotSettingsModal(
