@@ -4,6 +4,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +13,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -52,7 +56,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -142,7 +148,12 @@ fun ChatScreen(
     Scaffold(
         containerColor = EmochiBackground,
         topBar = {
-            Column(modifier = Modifier.fillMaxWidth().background(EmochiSurface)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(EmochiSurface)
+                    .statusBarsPadding()
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -234,49 +245,93 @@ fun ChatScreen(
             }
         },
         bottomBar = {
-            // Input bar
-            Row(
+            val clipboardManager = LocalClipboardManager.current
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(EmochiSurface)
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .navigationBarsPadding()
+                    .imePadding()
             ) {
-                OutlinedTextField(
-                    value = inputText,
-                    onValueChange = { inputText = it },
-                    placeholder = { Text("${bot.userCharName.ifBlank { "Kullanıcı" }} olarak yaz...", color = EmochiTextMuted, fontSize = 13.5.sp) },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("chat_input_field"),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = customTextFieldColors(),
-                    maxLines = 4
+                // Quick prompt chips
+                val quickPrompts = listOf(
+                    "🎭 Sahneyi derinleştir" to "Lütfen şu anki sahneyi ve karakterin iç dünyasını daha detaylı, atmosferik bir şekilde betimleyerek yanıt ver.",
+                    "💡 Ne yapmalıyım?" to "Karakter bana bakıp şu anda ne yapmam gerektiğiyle ilgili imalı bir öneride bulunsun.",
+                    "🔥 Duyguyu yükselt" to "Aramızdaki duygusal çekimi ve gerilimi hissettirecek şekilde davran.",
+                    "🎲 Sürpriz hamle" to "Karakter beklenmedik, şaşırtıcı bir tepki versin veya yeni bir olay başlatsın."
                 )
 
-                Spacer(modifier = Modifier.width(8.dp))
-
-                IconButton(
-                    onClick = {
-                        if (inputText.isNotBlank() && !isSending) {
-                            val text = inputText
-                            inputText = ""
-                            onSendMessage(text)
-                        }
-                    },
-                    enabled = inputText.isNotBlank() && !isSending,
+                Row(
                     modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(if (inputText.isNotBlank()) EmochiPrimary else EmochiCard)
-                        .testTag("send_message_button")
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        Icons.Default.Send,
-                        contentDescription = "Gönder",
-                        tint = if (inputText.isNotBlank()) Color(0xFF1A1B2E) else EmochiTextMuted,
-                        modifier = Modifier.size(18.dp)
+                    quickPrompts.forEach { (label, promptText) ->
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(EmochiCard)
+                                .border(1.dp, EmochiBorder, RoundedCornerShape(16.dp))
+                                .clickable(enabled = !isSending) {
+                                    onSendMessage(promptText)
+                                }
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = label,
+                                color = EmochiTextSecondary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+
+                // Input bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = inputText,
+                        onValueChange = { inputText = it },
+                        placeholder = { Text("${bot.userCharName.ifBlank { "Kullanıcı" }} olarak yaz...", color = EmochiTextMuted, fontSize = 13.5.sp) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("chat_input_field"),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = customTextFieldColors(),
+                        maxLines = 4
                     )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    IconButton(
+                        onClick = {
+                            if (inputText.isNotBlank() && !isSending) {
+                                val text = inputText
+                                inputText = ""
+                                onSendMessage(text)
+                            }
+                        },
+                        enabled = inputText.isNotBlank() && !isSending,
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(if (inputText.isNotBlank()) EmochiPrimary else EmochiCard)
+                            .testTag("send_message_button")
+                    ) {
+                        Icon(
+                            Icons.Default.Send,
+                            contentDescription = "Gönder",
+                            tint = if (inputText.isNotBlank()) Color(0xFF1A1B2E) else EmochiTextMuted,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }
@@ -387,10 +442,19 @@ fun ChatScreen(
                             }
 
                             // Message actions row
+                            val clipboardManager = LocalClipboardManager.current
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 modifier = Modifier.padding(top = 2.dp, bottom = 4.dp, start = 4.dp, end = 4.dp)
                             ) {
+                                Text(
+                                    text = "Kopyala",
+                                    color = EmochiTextMuted,
+                                    fontSize = 10.5.sp,
+                                    modifier = Modifier.clickable {
+                                        clipboardManager.setText(AnnotatedString(msg.text))
+                                    }
+                                )
                                 if (isUser) {
                                     Text(
                                         text = "Düzenle",

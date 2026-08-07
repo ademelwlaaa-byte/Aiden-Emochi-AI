@@ -85,6 +85,7 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
     init {
         viewModelScope.launch {
             repository.getOrCreateSettings()
+            repository.initStarterBotsIfEmpty()
         }
         try {
             tts = TextToSpeech(application) { status ->
@@ -130,6 +131,30 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
         _errorMessage.value = null
         _activeBotId.value = botId
         _uiState.value = UiState.Chat(botId)
+
+        viewModelScope.launch {
+            val existingMsgs = repository.getMessageListForBot(botId)
+            if (existingMsgs.isEmpty()) {
+                val bot = repository.getBot(botId)
+                if (bot != null) {
+                    val openingText = bot.openingMessage.ifBlank {
+                        if (bot.mode == "universe") {
+                            "*Sahne başlar. Çevre sakin ve atmosferik bir hava bürünmüştür.*\n\n\"Hikayemize nereden başlamak istersin?\""
+                        } else {
+                            "Merhaba! Seni seve seve dinliyorum, ne hakkında konuşmak istersin?"
+                        }
+                    }
+                    val openingMsg = MessageEntity(
+                        id = UUID.randomUUID().toString(),
+                        botId = bot.id,
+                        role = "assistant",
+                        text = openingText,
+                        timestamp = System.currentTimeMillis()
+                    )
+                    repository.saveMessage(openingMsg)
+                }
+            }
+        }
     }
 
     fun clearError() {
@@ -142,11 +167,19 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
                 _isSending.value = true
                 repository.saveBot(bot)
 
+                val openingText = bot.openingMessage.ifBlank {
+                    if (bot.mode == "universe") {
+                        "*Sahne başlar. Çevre sakin ve atmosferik bir hava bürünmüştür.*\n\n\"Hikayemize nereden başlamak istersin?\""
+                    } else {
+                        "Merhaba! Seni seve seve dinliyorum, ne hakkında konuşmak istersin?"
+                    }
+                }
+
                 val openingMsg = MessageEntity(
                     id = UUID.randomUUID().toString(),
                     botId = bot.id,
                     role = "assistant",
-                    text = bot.openingMessage,
+                    text = openingText,
                     timestamp = System.currentTimeMillis()
                 )
                 repository.saveMessage(openingMsg)
@@ -181,9 +214,9 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
                 )
                 repository.saveMessage(userMsg)
 
-                val updatedMessages = activeMessages.value + userMsg
+                val currentMsgs = repository.getMessageListForBot(botId)
 
-                val replyText = repository.generateAiReply(currentBot, updatedMessages)
+                val replyText = repository.generateAiReply(currentBot, currentMsgs)
 
                 val aiMsg = MessageEntity(
                     id = UUID.randomUUID().toString(),
@@ -196,7 +229,7 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
 
                 repository.saveBot(currentBot.copy(updatedAt = System.currentTimeMillis()))
 
-                val finalMsgs = updatedMessages + aiMsg
+                val finalMsgs = currentMsgs + aiMsg
                 if (finalMsgs.size % 6 == 0) {
                     repository.updateMemorySummaries(currentBot, finalMsgs)
                 }
@@ -211,16 +244,18 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
     fun regenerateLastResponse() {
         val botId = _activeBotId.value ?: return
         val currentBot = activeBot.value ?: return
-        val msgs = activeMessages.value
-        if (_isSending.value || msgs.isEmpty()) return
-
-        val lastAssistantIndex = msgs.indexOfLast { it.role == "assistant" }
-        if (lastAssistantIndex == -1) return
+        if (_isSending.value) return
 
         viewModelScope.launch {
             try {
                 _isSending.value = true
                 _errorMessage.value = null
+
+                val msgs = repository.getMessageListForBot(botId)
+                if (msgs.isEmpty()) return@launch
+
+                val lastAssistantIndex = msgs.indexOfLast { it.role == "assistant" }
+                if (lastAssistantIndex == -1) return@launch
 
                 val targetMsg = msgs[lastAssistantIndex]
                 repository.deleteMessage(targetMsg.id)
@@ -248,12 +283,13 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
     fun editMessage(msgId: String, newText: String) {
         val botId = _activeBotId.value ?: return
         val currentBot = activeBot.value ?: return
-        val msgs = activeMessages.value
-        val idx = msgs.indexOfFirst { it.id == msgId }
-        if (idx == -1) return
 
         viewModelScope.launch {
             try {
+                val msgs = repository.getMessageListForBot(botId)
+                val idx = msgs.indexOfFirst { it.id == msgId }
+                if (idx == -1) return@launch
+
                 val isUserMsg = msgs[idx].role == "user"
                 for (i in (idx + 1) until msgs.size) {
                     repository.deleteMessage(msgs[i].id)

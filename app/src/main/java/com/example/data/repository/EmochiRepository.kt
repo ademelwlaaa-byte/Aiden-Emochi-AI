@@ -69,6 +69,74 @@ class EmochiRepository(private val db: AppDatabase) {
 
     suspend fun updateUserSettings(settings: UserSettingsEntity) = settingsDao.insertOrUpdate(settings)
 
+    suspend fun getMessageListForBot(botId: String): List<MessageEntity> {
+        return messageDao.getMessagesForBotList(botId)
+    }
+
+    suspend fun initStarterBotsIfEmpty() = withContext(Dispatchers.IO) {
+        val existingBots = botDao.getAllBotsList()
+        if (existingBots.isEmpty()) {
+            val now = System.currentTimeMillis()
+            val starterBot1 = BotEntity(
+                id = "starter_ayla",
+                mode = "personal",
+                aiName = "Ayla",
+                aiPersonality = "Sıcak, neşeli, empati yeteneği yüksek, konuşkan ve korumacı bir yakın arkadaş. Zeki espriler yapmayı ve senin gününün nasıl geçtiğini dinlemeyi sever.",
+                scenario = "Lise/üniversiteden beri en yakın dostun. Akşam saatlerinde kahveni yudumlarken sana mesaj atıyor.",
+                universeName = "Kişisel Sohbet",
+                keyCharactersJson = "[]",
+                userCharName = "Sencer",
+                userCharDesc = "Ayla'nın en güvendiği yakın dostu.",
+                openingMessage = "*Telefonun ekranı aydınlanır, Ayla'dan yeni bir mesaj gelmiştir.*\n\n\"Selam! Sonunda bugünkü yoğun koşturmacayı bitirip koltuğuma çekilebildim. Sen nasılsın bakalım? Günün nasıl geçti, bana anlatmak istediğin bir şeyler var mı?\"",
+                writingStyle = "rp",
+                intensity = "normal",
+                customLength = "default",
+                isNsfw = true,
+                pinnedMemory = "Ayla her zaman içten ve samimidir. Sencer'e çok değer verir.",
+                updatedAt = now
+            )
+
+            val starterBot2 = BotEntity(
+                id = "starter_aetheria",
+                mode = "universe",
+                aiName = "Aetheria Yönetmeni",
+                aiPersonality = "Atmosferik, gizemli ve sürükleyici bir fantezi-siberpunk dünyası anlatıcısı.",
+                scenario = "Neon ışıklarıyla aydınlatılmış Aetheria şehrinin yüksek kuleleri ve gölgeli alt sokaklarında tehlikeli bir lonca anlaşması yapılmak üzeredir.",
+                universeName = "Aetheria: Neon & Büyü",
+                keyCharactersJson = """[{"id":"c1","name":"Valeria","desc":"Büyü teknolojisi uzmanı lonca lideri"},{"id":"c2","name":"Kael","desc":"Sessiz ve tehlikeli paralı asker"}]""",
+                userCharName = "Rider",
+                userCharDesc = "Loncanın en yetenekli bilgi tüccarı.",
+                openingMessage = "*Neon tabelaların yağmurlu asfalt üzerinde mor ve mavi yansımalar oluşturduğu sokağın köşesinde duruyorsun. Yağmurluğunun yakasını kaldırdın. Valeria, arkasındaki iki muhafızla birlikte gölgelerin arasından süzülerek sana doğru yaklaştı.*\n\n\"Tam zamanında geldin Rider,\" dedi Valeria, sesindeki elektronik bozulmayı gizlemeye çalışarak. \"İstediğimiz veri çipi elimizde ama izimizdeler. Planı devreye sokmaya hazır mısın?\"",
+                writingStyle = "rp",
+                intensity = "normal",
+                customLength = "default",
+                isNsfw = true,
+                pinnedMemory = "Aetheria evreninde yüksek teknoloji ile kadim sihir iç içedir.",
+                updatedAt = now - 1000
+            )
+
+            botDao.insertOrUpdate(starterBot1)
+            botDao.insertOrUpdate(starterBot2)
+
+            val msg1 = MessageEntity(
+                id = UUID.randomUUID().toString(),
+                botId = starterBot1.id,
+                role = "assistant",
+                text = starterBot1.openingMessage,
+                timestamp = now
+            )
+            val msg2 = MessageEntity(
+                id = UUID.randomUUID().toString(),
+                botId = starterBot2.id,
+                role = "assistant",
+                text = starterBot2.openingMessage,
+                timestamp = now - 1000
+            )
+            messageDao.insertMessage(msg1)
+            messageDao.insertMessage(msg2)
+        }
+    }
+
     suspend fun getOrCreateSettings(): UserSettingsEntity {
         var settings = settingsDao.getUserSettings()
         if (settings == null) {

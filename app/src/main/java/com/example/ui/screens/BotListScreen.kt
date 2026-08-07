@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Button
@@ -54,6 +57,7 @@ import com.example.data.local.UserSettingsEntity
 import com.example.ui.components.GlobalSettingsModal
 import com.example.ui.components.MoodColors
 import com.example.ui.components.OrbView
+import com.example.ui.components.customTextFieldColors
 import com.example.ui.theme.EmochiBackground
 import com.example.ui.theme.EmochiBorder
 import com.example.ui.theme.EmochiCard
@@ -84,6 +88,7 @@ fun BotListScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .navigationBarsPadding()
                     .padding(16.dp)
             ) {
                 Button(
@@ -106,12 +111,13 @@ fun BotListScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .statusBarsPadding()
         ) {
             // Header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -124,7 +130,7 @@ fun BotListScreen(
                     )
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 4.dp)
+                        modifier = Modifier.padding(top = 2.dp)
                     ) {
                         Icon(
                             Icons.Default.Speed,
@@ -167,6 +173,86 @@ fun BotListScreen(
                 }
             }
 
+            // Search Bar & Filter Chips
+            var searchQuery by remember { mutableStateOf("") }
+            var selectedFilter by remember { mutableStateOf("all") } // "all", "personal", "universe"
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+            ) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Bot veya evren ara...", color = EmochiTextMuted, fontSize = 13.sp) },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("search_bot_field"),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = customTextFieldColors(),
+                    leadingIcon = {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.Search,
+                            contentDescription = "Ara",
+                            tint = EmochiTextMuted,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val filters = listOf(
+                        "all" to "Tümü (${botList.size})",
+                        "personal" to "Karakterler (${botList.count { it.mode == "personal" }})",
+                        "universe" to "Evrenler (${botList.count { it.mode == "universe" }})"
+                    )
+
+                    filters.forEach { (key, label) ->
+                        val isSelected = selectedFilter == key
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(if (isSelected) EmochiPrimary else EmochiCard)
+                                .border(1.dp, if (isSelected) EmochiPrimary else EmochiBorder, RoundedCornerShape(20.dp))
+                                .clickable { selectedFilter = key }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = label,
+                                color = if (isSelected) Color(0xFF1A1B2E) else EmochiTextSecondary,
+                                fontSize = 11.5.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            val filteredBots = remember(botList, searchQuery, selectedFilter) {
+                botList.filter { bot ->
+                    val matchesFilter = when (selectedFilter) {
+                        "personal" -> bot.mode == "personal"
+                        "universe" -> bot.mode == "universe"
+                        else -> true
+                    }
+                    val query = searchQuery.trim().lowercase()
+                    val matchesQuery = query.isEmpty() ||
+                            bot.aiName.lowercase().contains(query) ||
+                            bot.universeName.lowercase().contains(query) ||
+                            bot.scenario.lowercase().contains(query)
+                    matchesFilter && matchesQuery
+                }
+            }
+
             if (botList.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -190,6 +276,27 @@ fun BotListScreen(
                         )
                     }
                 }
+            } else if (filteredBots.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "Aramanıza uygun bot bulunamadı.",
+                            color = EmochiTextSecondary,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = "Farklı bir arama terimi veya filtre deneyin.",
+                            color = EmochiTextMuted,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
             } else {
                 LazyColumn(
                     modifier = Modifier
@@ -198,7 +305,7 @@ fun BotListScreen(
                         .padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(botList, key = { it.id }) { bot ->
+                    items(filteredBots, key = { it.id }) { bot ->
                         val isUniverse = bot.mode == "universe"
                         val displayName = if (isUniverse) bot.universeName.ifBlank { "Evren" } else bot.aiName.ifBlank { "Karakter" }
                         val hue = MoodColors.getMoodHue(if (isUniverse) "curious" else "calm")
