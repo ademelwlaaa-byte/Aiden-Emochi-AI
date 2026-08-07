@@ -194,12 +194,12 @@ fun GlobalSettingsModal(
             description = "En gelişmiş, dengeli ve hızlı Gemini modeli. Düşük token harcaması ile yüksek kaliteli rol yapma yanıtları verir."
         ),
         ModelSpec(
-            key = "gemini-2.0-flash",
-            name = "Gemini 2.0 Flash",
+            key = "gemini-3.5-flash",
+            name = "Gemini 3.5 Flash",
             provider = "Google Gemini",
-            tokenCostRate = "🟢 Ultra Düşük (~0.3x Token Tüketimi)",
+            tokenCostRate = "⚡ Hızlı & Yeni Nesil",
             badgeColor = Color(0xFF00BCD4),
-            description = "Ultra seri yanıt süresi ve minimum token tüketimi. Sohbet hafızasını ekonomik şekilde kullanır."
+            description = "Yeni nesil ultra hızlı yanıt süresi. Karmaşık senaryolar ve sohbetler için optimize edilmiştir."
         ),
         ModelSpec(
             key = "gemini-2.5-pro",

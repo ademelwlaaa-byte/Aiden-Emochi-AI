@@ -201,7 +201,7 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
                     repository.updateMemorySummaries(currentBot, finalMsgs)
                 }
             } catch (e: Exception) {
-                _errorMessage.value = "Yanıt oluşturulamadı: ${e.message}"
+                _errorMessage.value = e.message ?: "Yanıt oluşturulamadı."
             } finally {
                 _isSending.value = false
             }
@@ -238,7 +238,7 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
                 )
                 repository.saveMessage(newAiMsg)
             } catch (e: Exception) {
-                _errorMessage.value = "Yeniden oluşturulamadı: ${e.message}"
+                _errorMessage.value = e.message ?: "Yeniden oluşturulamadı."
             } finally {
                 _isSending.value = false
             }
@@ -279,7 +279,7 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
                     repository.saveMessage(newAiMsg)
                 }
             } catch (e: Exception) {
-                _errorMessage.value = "Mesaj düzenlenemedi: ${e.message}"
+                _errorMessage.value = e.message ?: "Mesaj düzenlenemedi."
             } finally {
                 _isSending.value = false
             }

@@ -13,7 +13,7 @@ data class UserSettingsEntity(
     val backupApiKey: String = "",
     val selectedProvider: String = "gemini", // "gemini", "groq", "claude", "openai"
     val selectedModel: String = "gemini-2.5-flash",
-    val fallbackModel: String = "gemini-2.0-flash",
+    val fallbackModel: String = "gemini-2.5-flash",
     val responseLength: String = "standard", // "short", "standard", "long"
     val enableNsfw: Boolean = true, // +18 / Filtresiz RP modu
     val enableFlirty: Boolean = true, // Çapkınlık (Flirty)

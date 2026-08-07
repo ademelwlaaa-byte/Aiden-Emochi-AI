@@ -475,7 +475,7 @@ fun CreateBotWizardScreen(
                                     val generated = onGenerateOpening(buildCurrentDraft())
                                     openingMessage = generated
                                 } catch (e: Exception) {
-                                    genError = "Oluşturulamadı: ${e.message}"
+                                    genError = e.message ?: "Oluşturulamadı."
                                 } finally {
                                     isGeneratingOpening = false
                                 }

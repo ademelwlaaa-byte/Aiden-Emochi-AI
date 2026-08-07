@@ -189,8 +189,8 @@ Durdu, ifadesi ciddileşti.
     private fun sanitizeModelName(model: String): String {
         val clean = model.trim().lowercase()
         return when {
-            clean == "gemini-1.5-flash" -> "gemini-2.5-flash"
-            clean == "gemini-1.5-pro" -> "gemini-2.5-pro"
+            clean == "gemini-1.5-flash" || clean == "gemini-2.0-flash" -> "gemini-2.5-flash"
+            clean == "gemini-1.5-pro" || clean == "gemini-2.0-pro" || clean == "gemini-2.0-flash-thinking" -> "gemini-2.5-pro"
             clean.isEmpty() -> "gemini-2.5-flash"
             else -> model.trim()
         }
@@ -217,7 +217,7 @@ Durdu, ifadesi ciddileşti.
             generationConfig = GeminiGenerationConfig(temperature = 0.85f)
         )
 
-        val modelsToTry = listOf(sanitizedModel, "gemini-2.5-flash", "gemini-2.0-flash").distinct()
+        val modelsToTry = listOf(sanitizedModel, "gemini-2.5-flash", "gemini-3.5-flash").distinct()
         var lastException: Exception? = null
 
         for (currModel in modelsToTry) {
@@ -237,19 +237,32 @@ Durdu, ifadesi ciddileşti.
                 return@withContext Pair(text.trim(), Pair(promptTokens, candTokens))
             } catch (e: retrofit2.HttpException) {
                 val errorJson = e.response()?.errorBody()?.string()
-                val msg = try {
+                val serverMsg = try {
                     JSONObject(errorJson ?: "").optJSONObject("error")?.optString("message")
                 } catch (_: Exception) { null }
-                val exc = IllegalStateException(msg ?: "Gemini API Hatası [${e.code()}]: ${e.message()}")
+
+                val rawText = serverMsg ?: e.message() ?: ""
+                val isQuota = e.code() == 429 || rawText.contains("quota", ignoreCase = true) || rawText.contains("RESOURCE_EXHAUSTED", ignoreCase = true)
+
+                val userFacingMsg = if (isQuota) {
+                    "Gemini API kullanım kotası aşıldı (429 Rate Limit). Lütfen Ayarlar -> AI Model Ayarları menüsünden kendi API anahtarınızı (Gemini, Groq, Claude veya OpenAI) ekleyin."
+                } else {
+                    serverMsg ?: "Gemini API Hatası [${e.code()}]: ${e.message()}"
+                }
+
+                val exc = IllegalStateException(userFacingMsg)
                 lastException = exc
-                if (e.code() != 404) {
+
+                if (e.code() == 404 || isQuota) {
+                    continue
+                } else {
                     throw exc
                 }
             } catch (e: Exception) {
                 lastException = e
             }
         }
-        throw lastException ?: IllegalStateException("Gemini API çağrısı başarısız oldu.")
+        throw lastException ?: IllegalStateException("Gemini API çağrısı başarısız oldu. Lütfen Ayarlar'dan API Key'inizi kontrol edin.")
     }
 
     private suspend fun callOpenAiCompatibleApi(
@@ -368,6 +381,7 @@ Durdu, ifadesi ciddileşti.
 
         val selectedModel = sanitizeModelName(settings.selectedModel.ifBlank { "gemini-2.5-flash" })
 
+        var primaryException: Exception? = null
         // Primary Execution
         try {
             val result = executeModelRequest(selectedModel, settings, systemPrompt, messages)
@@ -377,25 +391,35 @@ Durdu, ifadesi ciddileşti.
             if (!settings.enableAutoFallback) {
                 throw e
             }
+            primaryException = e
         }
 
         // Auto Fallback to Gemini Secondary Model
-        val fallbackModel = sanitizeModelName(settings.fallbackModel.ifBlank { "gemini-2.0-flash" })
-        val geminiKey = if (settings.customApiKey.isNotBlank()) settings.customApiKey else BuildConfig.GEMINI_API_KEY
-        val backupKey = if (settings.backupApiKey.isNotBlank()) settings.backupApiKey else geminiKey
+        val fallbackModel = sanitizeModelName(settings.fallbackModel.ifBlank { "gemini-2.5-flash" })
+        val customKey = settings.customApiKey.trim()
+        val buildConfigKey = BuildConfig.GEMINI_API_KEY.trim()
+        val backupKey = settings.backupApiKey.trim()
 
-        val keyToUse = if (geminiKey.isNotBlank() && geminiKey != "MY_GEMINI_API_KEY") geminiKey else backupKey
-        if (keyToUse.isBlank() || keyToUse == "MY_GEMINI_API_KEY") {
-            throw IllegalStateException("Model yanıt veremedi ve yedek Gemini API key bulunamadı. Lütfen Ayarlar'dan API Key girin.")
+        val primaryKey = if (customKey.isNotBlank()) customKey else buildConfigKey
+        val candidateKeys = listOf(primaryKey, backupKey)
+            .filter { it.isNotBlank() && it != "MY_GEMINI_API_KEY" }
+            .distinct()
+
+        if (candidateKeys.isEmpty()) {
+            throw primaryException ?: IllegalStateException("API Key bulunamadı.")
         }
 
-        try {
-            val result = callGeminiApi(keyToUse, fallbackModel, systemPrompt, messages)
-            recordTokenUsage(result.second.first, result.second.second)
-            return@withContext result.first
-        } catch (fallbackErr: Exception) {
-            throw IllegalStateException("Model ve yedek yanıt veremedi: ${fallbackErr.message}")
+        var fallbackErr: Exception? = null
+        for (k in candidateKeys) {
+            try {
+                val result = callGeminiApi(k, fallbackModel, systemPrompt, messages)
+                recordTokenUsage(result.second.first, result.second.second)
+                return@withContext result.first
+            } catch (err: Exception) {
+                fallbackErr = err
+            }
         }
+        throw IllegalStateException("${primaryException?.message}\n(Yedek model de yanıt veremedi: ${fallbackErr?.message})")
     }
 
     private suspend fun executeModelRequest(
@@ -427,20 +451,34 @@ Durdu, ifadesi ciddileşti.
             }
             // Default Gemini Models
             else -> {
-                val geminiKey = if (settings.customApiKey.isNotBlank()) settings.customApiKey else BuildConfig.GEMINI_API_KEY
-                val keyToUse = if (geminiKey.isNotBlank() && geminiKey != "MY_GEMINI_API_KEY") geminiKey else settings.backupApiKey
-                if (keyToUse.isBlank() || keyToUse == "MY_GEMINI_API_KEY") {
-                    throw IllegalStateException("Gemini API Key eksik. Lütfen Genel Ayarlar'dan API Key girin.")
+                val customKey = settings.customApiKey.trim()
+                val buildConfigKey = BuildConfig.GEMINI_API_KEY.trim()
+                val backupKey = settings.backupApiKey.trim()
+
+                val primaryKey = if (customKey.isNotBlank()) customKey else buildConfigKey
+                val candidateKeys = listOf(primaryKey, backupKey)
+                    .filter { it.isNotBlank() && it != "MY_GEMINI_API_KEY" }
+                    .distinct()
+
+                if (candidateKeys.isEmpty()) {
+                    throw IllegalStateException("Gemini API Key eksik. Lütfen Ayarlar -> AI Model Ayarları menüsünden API Key girin.")
                 }
-                callGeminiApi(keyToUse, model, systemPrompt, messages)
+
+                var lastErr: Exception? = null
+                for (k in candidateKeys) {
+                    try {
+                        return callGeminiApi(k, model, systemPrompt, messages)
+                    } catch (err: Exception) {
+                        lastErr = err
+                    }
+                }
+                throw lastErr ?: IllegalStateException("Gemini API anahtarları ile bağlantı kurulamadı.")
             }
         }
     }
 
     suspend fun generateOpeningMessage(bot: BotEntity): String = withContext(Dispatchers.IO) {
         val settings = getOrCreateSettings()
-        val geminiKey = if (settings.customApiKey.isNotBlank()) settings.customApiKey else BuildConfig.GEMINI_API_KEY
-        val apiKey = if (geminiKey.isNotBlank() && geminiKey != "MY_GEMINI_API_KEY") geminiKey else settings.backupApiKey
 
         val systemPrompt = buildSystemPrompt(bot, settings, includeStyleGuide = false) + if (bot.writingStyle == "rp") {
             "\n\nGörev: Bu sahneyi başlatan bir açılış anı yaz. Üçüncü tekil şahıs, roman/RP tarzı, betimleme + diyalog içersin. 3-6 cümle. Sadece sahneyi yaz."
@@ -450,19 +488,9 @@ Durdu, ifadesi ciddileşti.
 
         val requestMsgs = listOf(MessageEntity(id = "init", botId = bot.id, role = "user", text = "Sahneyi/mesajı başlat.", timestamp = 0L))
 
-        return@withContext try {
-            val result = executeModelRequest(sanitizeModelName(settings.selectedModel.ifBlank { "gemini-2.5-flash" }), settings, systemPrompt, requestMsgs)
-            recordTokenUsage(result.second.first, result.second.second)
-            result.first
-        } catch (e: Exception) {
-            if (apiKey.isNotBlank() && apiKey != "MY_GEMINI_API_KEY") {
-                val res = callGeminiApi(apiKey, "gemini-2.5-flash", systemPrompt, requestMsgs)
-                recordTokenUsage(res.second.first, res.second.second)
-                res.first
-            } else {
-                "Merhaba! Seni gördüğüme sevindim."
-            }
-        }
+        val result = executeModelRequest(sanitizeModelName(settings.selectedModel.ifBlank { "gemini-2.5-flash" }), settings, systemPrompt, requestMsgs)
+        recordTokenUsage(result.second.first, result.second.second)
+        return@withContext result.first
     }
 
     suspend fun updateMemorySummaries(bot: BotEntity, messages: List<MessageEntity>) = withContext(Dispatchers.IO) {
@@ -566,7 +594,7 @@ Durdu, ifadesi ciddileşti.
                             openaiApiKey = sObj.optString("openaiApiKey", ""),
                             backupApiKey = sObj.optString("backupApiKey", ""),
                             selectedModel = sObj.optString("selectedModel", "gemini-2.5-flash"),
-                            fallbackModel = sObj.optString("fallbackModel", "gemini-2.0-flash")
+                            fallbackModel = sObj.optString("fallbackModel", "gemini-2.5-flash")
                         )
                         settingsDao.insertOrUpdate(settings)
                     } catch (_: Exception) {}
