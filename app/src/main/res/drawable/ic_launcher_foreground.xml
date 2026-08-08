@@ -3,6 +3,7 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/emochi_app_icon_1786050672317"
+        android:drawable="@drawable/ic_vai_logo"
         android:gravity="center" />
 </layer-list>
+

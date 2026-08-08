@@ -435,6 +435,20 @@ fun ChatScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            if (bot.chatBgUrl.isNotBlank()) {
+                coil.compose.AsyncImage(
+                    model = bot.chatBgUrl,
+                    contentDescription = "Sohbet Arka Planı",
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.65f))
+                )
+            }
+
             Column(modifier = Modifier.fillMaxSize()) {
                 errorMessage?.let { err ->
                     Row(

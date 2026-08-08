@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Emochi AI"
+rootProject.name = "Velora Ado AI"
 
 include(":app")

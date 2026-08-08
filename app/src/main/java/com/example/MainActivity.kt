@@ -1,6 +1,7 @@
 package com.example
 
 import android.os.Bundle
+import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -86,11 +87,15 @@ fun EmochiAppMain(viewModel: EmochiViewModel) {
                     onSaveSettings = { viewModel.updateSettings(it) },
                     onExportData = { viewModel.exportBackupJson() },
                     onImportData = { viewModel.importBackupJson(it) },
-                    onImportPresetBot = { viewModel.createPresetBot(it) }
+                    onImportPresetBot = { viewModel.createPresetBot(it) },
+                    onTogglePrivacy = { viewModel.updateBotProfile(it) }
                 )
             }
 
             is UiState.SetupWizard -> {
+                BackHandler {
+                    viewModel.openMenu()
+                }
                 CreateBotWizardScreen(
                     onBack = { viewModel.openMenu() },
                     onFinish = { newBot ->
@@ -105,6 +110,9 @@ fun EmochiAppMain(viewModel: EmochiViewModel) {
             }
 
             is UiState.Chat -> {
+                BackHandler {
+                    viewModel.openMenu()
+                }
                 val currentBot = activeBot
                 if (currentBot == null) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

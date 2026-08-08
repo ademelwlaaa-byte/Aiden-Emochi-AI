@@ -1076,6 +1076,8 @@ fun BotSettingsModal(
     var customLength by remember { mutableStateOf(bot.customLength) }
     var isNsfw by remember { mutableStateOf(bot.isNsfw) }
     var avatarUrl by remember { mutableStateOf(bot.avatarUrl) }
+    var chatBgUrl by remember { mutableStateOf(bot.chatBgUrl) }
+    var isPublic by remember { mutableStateOf(bot.isPublic) }
     var pinnedMemory by remember { mutableStateOf(bot.pinnedMemory) }
     var storyNotes by remember { mutableStateOf(bot.storyNotes) }
     var memoryNotes by remember { mutableStateOf(bot.memoryNotes) }
@@ -1090,6 +1092,12 @@ fun BotSettingsModal(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { avatarUrl = it.toString() }
+    }
+
+    val bgPhotoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { chatBgUrl = it.toString() }
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -1174,6 +1182,106 @@ fun BotSettingsModal(
                                 }
                             }
                         }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Chat Background Wallpaper Card
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = EmochiCard),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, EmochiBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(58.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF252535)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (chatBgUrl.isNotBlank()) {
+                                AsyncImage(
+                                    model = chatBgUrl,
+                                    contentDescription = "Sohbet Arka Planı",
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = EmochiPrimary, modifier = Modifier.size(24.dp))
+                            }
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Sohbet Arka Plan Resmi", color = EmochiTextPrimary, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                            Text("Sohbet içi özel duvar kağıdı belirleyin", color = EmochiTextMuted, fontSize = 11.sp)
+                            
+                            Row(modifier = Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Button(
+                                    onClick = { bgPhotoPickerLauncher.launch("image/*") },
+                                    colors = ButtonDefaults.buttonColors(containerColor = EmochiPrimary, contentColor = Color(0xFF1A1B2E)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.height(30.dp)
+                                ) {
+                                    Text("Galeri", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                if (chatBgUrl.isNotBlank()) {
+                                    TextButton(
+                                        onClick = { chatBgUrl = "" },
+                                        modifier = Modifier.height(30.dp)
+                                    ) {
+                                        Text("Kaldır", fontSize = 11.sp, color = EmochiError)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Bot Privacy Toggle Card (Public / Private)
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = EmochiCard),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, EmochiBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isPublic) "🌐 Herkese Açık Bot" else "🔒 Sadece Kendine Özel",
+                                color = EmochiTextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (isPublic) "Diğer kullanıcılar 'Keşfet' bölümünde botunuzu bulabilir." else "Bu bot gizlidir, sadece siz görebilirsiniz.",
+                                color = EmochiTextMuted,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = isPublic,
+                            onCheckedChange = { isPublic = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFF1A1B2E),
+                                checkedTrackColor = EmochiPrimary
+                            )
+                        )
                     }
                 }
 
@@ -1430,6 +1538,8 @@ fun BotSettingsModal(
                             customLength = customLength,
                             isNsfw = isNsfw,
                             avatarUrl = avatarUrl,
+                            chatBgUrl = chatBgUrl,
+                            isPublic = isPublic,
                             pinnedMemory = pinnedMemory,
                             updatedAt = System.currentTimeMillis()
                         )

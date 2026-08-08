@@ -20,9 +20,12 @@ data class BotEntity(
     val customLength: String = "default", // "default", "short", "standard", "long"
     val isNsfw: Boolean = true, // +18 / Filtresiz RP
     val avatarUrl: String = "",
+    val chatBgUrl: String = "", // Bot sohbet arka planı
+    val isPublic: Boolean = true, // Herkese açık mı yoksa sadece kendine özel mi?
     val pinnedMemory: String = "",
     val storyNotes: String = "",
     val memoryNotes: String = "",
     val updatedAt: Long = System.currentTimeMillis()
 )
+
 

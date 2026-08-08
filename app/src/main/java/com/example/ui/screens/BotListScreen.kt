@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,6 +25,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Speed
@@ -33,6 +36,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.data.local.BotEntity
 import com.example.data.local.UserSettingsEntity
 import com.example.ui.components.GlobalSettingsModal
@@ -78,12 +83,20 @@ fun BotListScreen(
     onSaveSettings: (UserSettingsEntity) -> Unit,
     onExportData: suspend () -> String,
     onImportData: suspend (String) -> Unit,
-    onImportPresetBot: ((BotEntity) -> Unit)? = null
+    onImportPresetBot: ((BotEntity) -> Unit)? = null,
+    onTogglePrivacy: ((BotEntity) -> Unit)? = null
 ) {
     var showGlobalSettings by remember { mutableStateOf(false) }
     var confirmDeleteId by remember { mutableStateOf<String?>(null) }
     var selectedFilter by remember { mutableStateOf("all") } // "all", "personal", "universe"
-    var activeTab by remember { mutableStateOf("chats") } // "chats", "explore"
+    var privacyFilter by remember { mutableStateOf("all") } // "all", "public", "private"
+    var searchQuery by remember { mutableStateOf("") }
+    var activeTab by remember { mutableStateOf("chats") } // "chats", "discover", "templates"
+
+    // System Back button returns to "chats" tab first before exiting
+    BackHandler(enabled = activeTab != "chats") {
+        activeTab = "chats"
+    }
 
     Scaffold(
         containerColor = EmochiBackground,
@@ -104,42 +117,54 @@ fun BotListScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                        .padding(horizontal = 6.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceAround,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 1. Keşfet
+                    // 1. Şablonlar (Hazır Karakterler)
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
-                            .clickable { activeTab = "explore" }
-                            .padding(8.dp)
+                            .clickable { activeTab = "templates" }
+                            .padding(6.dp)
                     ) {
                         Icon(
-                            imageVector = androidx.compose.material.icons.Icons.Default.AutoAwesome,
-                            contentDescription = "Keşfet",
-                            tint = if (activeTab == "explore") EmochiPrimary else EmochiTextMuted,
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "Şablonlar",
+                            tint = if (activeTab == "templates") EmochiPrimary else EmochiTextMuted,
                             modifier = Modifier.size(22.dp)
                         )
-                        Text("Keşfet", color = if (activeTab == "explore") EmochiPrimary else EmochiTextMuted, fontSize = 10.sp, fontWeight = if (activeTab == "explore") FontWeight.Bold else FontWeight.Normal, modifier = Modifier.padding(top = 2.dp))
+                        Text(
+                            text = "Şablonlar",
+                            color = if (activeTab == "templates") EmochiPrimary else EmochiTextMuted,
+                            fontSize = 10.sp,
+                            fontWeight = if (activeTab == "templates") FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
                     }
 
-                    // 2. Sohbetler
+                    // 2. Sohbetler (Aktif Chatler)
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
                             .clickable { activeTab = "chats" }
-                            .padding(8.dp)
+                            .padding(6.dp)
                     ) {
                         Icon(
-                            imageVector = androidx.compose.material.icons.Icons.Default.Speed,
+                            imageVector = Icons.Default.Speed,
                             contentDescription = "Sohbetler",
                             tint = if (activeTab == "chats") EmochiPrimary else EmochiTextMuted,
                             modifier = Modifier.size(22.dp)
                         )
-                        Text("Sohbetler", color = if (activeTab == "chats") EmochiPrimary else EmochiTextMuted, fontSize = 10.sp, fontWeight = if (activeTab == "chats") FontWeight.Bold else FontWeight.Normal, modifier = Modifier.padding(top = 2.dp))
+                        Text(
+                            text = "Sohbetler",
+                            color = if (activeTab == "chats") EmochiPrimary else EmochiTextMuted,
+                            fontSize = 10.sp,
+                            fontWeight = if (activeTab == "chats") FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
                     }
 
                     // 3. Center (+) Yellow Button
@@ -159,21 +184,27 @@ fun BotListScreen(
                         )
                     }
 
-                    // 4. Karakterler
+                    // 4. Keşfet (Arama ve Karakter Havuzu)
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
-                            .clickable { selectedFilter = if (selectedFilter == "personal") "all" else "personal" }
-                            .padding(8.dp)
+                            .clickable { activeTab = "discover" }
+                            .padding(6.dp)
                     ) {
                         Icon(
-                            imageVector = androidx.compose.material.icons.Icons.Default.Search,
-                            contentDescription = "Filtrele",
-                            tint = if (selectedFilter == "personal") EmochiPrimary else EmochiTextMuted,
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Keşfet",
+                            tint = if (activeTab == "discover") EmochiPrimary else EmochiTextMuted,
                             modifier = Modifier.size(22.dp)
                         )
-                        Text("Karakterler", color = if (selectedFilter == "personal") EmochiPrimary else EmochiTextMuted, fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp))
+                        Text(
+                            text = "Keşfet",
+                            color = if (activeTab == "discover") EmochiPrimary else EmochiTextMuted,
+                            fontSize = 10.sp,
+                            fontWeight = if (activeTab == "discover") FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
                     }
 
                     // 5. Ayarlar
@@ -182,7 +213,7 @@ fun BotListScreen(
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
                             .clickable { showGlobalSettings = true }
-                            .padding(8.dp)
+                            .padding(6.dp)
                             .testTag("global_settings_button")
                     ) {
                         Icon(
@@ -203,47 +234,41 @@ fun BotListScreen(
                 .padding(innerPadding)
                 .statusBarsPadding()
         ) {
-            // Header
+            // Velora Ado AI Top Branding Header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(
-                        text = if (activeTab == "explore") "Keşfet & Şablonlar" else "Botlarım",
-                        color = EmochiTextPrimary,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AsyncImage(
+                        model = R.drawable.ic_vai_logo,
+                        contentDescription = "Velora Ado AI Logo",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(1.dp, EmochiBorder, RoundedCornerShape(10.dp))
                     )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 2.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Speed,
-                            contentDescription = null,
-                            tint = EmochiPrimary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
                         Text(
-                            text = buildString {
-                                append(userSettings?.selectedModel?.ifBlank { "gemini-2.5-flash" } ?: "gemini-2.5-flash")
-                                val lenLabel = when(userSettings?.responseLength) {
-                                    "short" -> " ⚡ Kısa"
-                                    "long" -> " 📖 Uzun"
-                                    else -> " 📜 Standart"
-                                }
-                                append(" |$lenLabel")
-                                if (userSettings?.enableNsfw == true) {
-                                    append(" | 🔥 +18")
-                                }
+                            text = "Velora Ado AI",
+                            color = EmochiTextPrimary,
+                            fontSize = 19.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = when (activeTab) {
+                                "templates" -> "VAI • Şablonlar & Senaryolar"
+                                "discover" -> "VAI • Keşfet & Karakter Havuzu"
+                                else -> "VAI • Aktif Sohbetler"
                             },
-                            color = EmochiTextSecondary,
-                            fontSize = 11.5.sp
+                            color = EmochiPrimary,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Medium
                         )
                     }
                 }
@@ -263,235 +288,311 @@ fun BotListScreen(
                 }
             }
 
-            if (activeTab == "explore") {
+            if (activeTab == "templates") {
                 ExploreTabContent(onImportPresetBot = onImportPresetBot)
             } else {
-                // Search Bar & Filter Chips
-                var searchQuery by remember { mutableStateOf("") }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp)
-            ) {
-                androidx.compose.material3.OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text("Bot veya evren ara...", color = EmochiTextMuted, fontSize = 13.sp) },
-                    singleLine = true,
+                // Discover or Chats Tab View
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("search_bot_field"),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = customTextFieldColors(),
-                    leadingIcon = {
-                        Icon(
-                            imageVector = androidx.compose.material.icons.Icons.Default.Search,
-                            contentDescription = "Ara",
-                            tint = EmochiTextMuted,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
                 ) {
-                    val filters = listOf(
-                        "all" to "Tümü (${botList.size})",
-                        "personal" to "Karakterler (${botList.count { it.mode == "personal" }})",
-                        "universe" to "Evrenler (${botList.count { it.mode == "universe" }})"
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = {
+                            Text(
+                                text = if (activeTab == "discover") "Keşfette bot, karakter veya evren ara..." else "Sohbetlerimde ara...",
+                                color = EmochiTextMuted,
+                                fontSize = 13.sp
+                            )
+                        },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("search_bot_field"),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = customTextFieldColors(),
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Ara",
+                                tint = EmochiTextMuted,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     )
 
-                    filters.forEach { (key, label) ->
-                        val isSelected = selectedFilter == key
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(if (isSelected) EmochiPrimary else EmochiCard)
-                                .border(1.dp, if (isSelected) EmochiPrimary else EmochiBorder, RoundedCornerShape(20.dp))
-                                .clickable { selectedFilter = key }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = label,
-                                color = if (isSelected) Color(0xFF1A1B2E) else EmochiTextSecondary,
-                                fontSize = 11.5.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Filters
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (activeTab == "discover") {
+                            val privFilters = listOf(
+                                "all" to "Tümü (${botList.size})",
+                                "public" to "🌐 Herkese Açık (${botList.count { it.isPublic }})",
+                                "private" to "🔒 Kendine Özel (${botList.count { !it.isPublic }})"
                             )
+
+                            privFilters.forEach { (key, label) ->
+                                val isSelected = privacyFilter == key
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(if (isSelected) EmochiPrimary else EmochiCard)
+                                        .border(1.dp, if (isSelected) EmochiPrimary else EmochiBorder, RoundedCornerShape(20.dp))
+                                        .clickable { privacyFilter = key }
+                                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                                ) {
+                                    Text(
+                                        text = label,
+                                        color = if (isSelected) Color(0xFF1A1B2E) else EmochiTextSecondary,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            }
+                        } else {
+                            val filters = listOf(
+                                "all" to "Tümü (${botList.size})",
+                                "personal" to "Karakterler (${botList.count { it.mode == "personal" }})",
+                                "universe" to "Evrenler (${botList.count { it.mode == "universe" }})"
+                            )
+
+                            filters.forEach { (key, label) ->
+                                val isSelected = selectedFilter == key
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(if (isSelected) EmochiPrimary else EmochiCard)
+                                        .border(1.dp, if (isSelected) EmochiPrimary else EmochiBorder, RoundedCornerShape(20.dp))
+                                        .clickable { selectedFilter = key }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = label,
+                                        color = if (isSelected) Color(0xFF1A1B2E) else EmochiTextSecondary,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            }
                         }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-            val filteredBots = remember(botList, searchQuery, selectedFilter) {
-                botList.filter { bot ->
-                    val matchesFilter = when (selectedFilter) {
-                        "personal" -> bot.mode == "personal"
-                        "universe" -> bot.mode == "universe"
-                        else -> true
-                    }
-                    val query = searchQuery.trim().lowercase()
-                    val matchesQuery = query.isEmpty() ||
-                            bot.aiName.lowercase().contains(query) ||
-                            bot.universeName.lowercase().contains(query) ||
-                            bot.scenario.lowercase().contains(query)
-                    matchesFilter && matchesQuery
-                }
-            }
+                val filteredBots = remember(botList, searchQuery, selectedFilter, privacyFilter, activeTab) {
+                    botList.filter { bot ->
+                        val query = searchQuery.trim().lowercase()
+                        val matchesQuery = query.isEmpty() ||
+                                bot.aiName.lowercase().contains(query) ||
+                                bot.universeName.lowercase().contains(query) ||
+                                bot.scenario.lowercase().contains(query)
 
-            if (botList.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        OrbView(hue = 275f, size = 56.dp)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "Henüz bir bot oluşturmadınız.",
-                            color = EmochiTextSecondary,
-                            fontSize = 14.sp
-                        )
-                        Text(
-                            text = "Aşağıdaki butona dokunarak ilk AI karakterinizi yazın.",
-                            color = EmochiTextMuted,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
+                        if (activeTab == "discover") {
+                            val matchesPrivacy = when (privacyFilter) {
+                                "public" -> bot.isPublic
+                                "private" -> !bot.isPublic
+                                else -> true
+                            }
+                            matchesPrivacy && matchesQuery
+                        } else {
+                            val matchesFilter = when (selectedFilter) {
+                                "personal" -> bot.mode == "personal"
+                                "universe" -> bot.mode == "universe"
+                                else -> true
+                            }
+                            matchesFilter && matchesQuery
+                        }
                     }
                 }
-            } else if (filteredBots.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "Aramanıza uygun bot bulunamadı.",
-                            color = EmochiTextSecondary,
-                            fontSize = 14.sp
-                        )
-                        Text(
-                            text = "Farklı bir arama terimi veya filtre deneyin.",
-                            color = EmochiTextMuted,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                    }
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(filteredBots, key = { it.id }) { bot ->
-                        val isUniverse = bot.mode == "universe"
-                        val displayName = if (isUniverse) bot.universeName.ifBlank { "Evren" } else bot.aiName.ifBlank { "Karakter" }
-                        val hue = MoodColors.getMoodHue(if (isUniverse) "curious" else "calm")
 
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = EmochiSurface),
-                            shape = RoundedCornerShape(16.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, EmochiBorder),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onOpenBot(bot.id) }
-                                .testTag("bot_card_${bot.id}")
-                        ) {
-                            Row(
+                if (botList.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            OrbView(hue = 275f, size = 56.dp)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Henüz bir bot oluşturmadınız.",
+                                color = EmochiTextSecondary,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                text = "Aşağıdaki (+) butonuna dokunarak ilk Velora AI karakterinizi yazın.",
+                                color = EmochiTextMuted,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                } else if (filteredBots.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "Aramanıza uygun bot bulunamadı.",
+                                color = EmochiTextSecondary,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                text = "Farklı bir arama terimi veya filtre deneyin.",
+                                color = EmochiTextMuted,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(filteredBots, key = { it.id }) { bot ->
+                            val isUniverse = bot.mode == "universe"
+                            val displayName = if (isUniverse) bot.universeName.ifBlank { "Evren" } else bot.aiName.ifBlank { "Karakter" }
+                            val hue = MoodColors.getMoodHue(if (isUniverse) "curious" else "calm")
+
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = EmochiSurface),
+                                shape = RoundedCornerShape(16.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, EmochiBorder),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(14.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .clickable { onOpenBot(bot.id) }
+                                    .testTag("bot_card_${bot.id}")
                             ) {
-                                if (bot.avatarUrl.isNotBlank()) {
-                                    AsyncImage(
-                                        model = bot.avatarUrl,
-                                        contentDescription = displayName,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier
-                                            .size(42.dp)
-                                            .clip(CircleShape)
-                                            .border(1.dp, EmochiBorder, CircleShape)
-                                    )
-                                } else {
-                                    OrbView(hue = hue, size = 42.dp)
-                                }
-                                Spacer(modifier = Modifier.width(12.dp))
-
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = displayName,
-                                            color = EmochiTextPrimary,
-                                            fontSize = 16.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Box(
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (bot.avatarUrl.isNotBlank()) {
+                                        AsyncImage(
+                                            model = bot.avatarUrl,
+                                            contentDescription = displayName,
+                                            contentScale = ContentScale.Crop,
                                             modifier = Modifier
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(if (isUniverse) Color(0xFF2A2C4A) else Color(0xFF1E2038))
-                                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                                        ) {
+                                                .size(42.dp)
+                                                .clip(CircleShape)
+                                                .border(1.dp, EmochiBorder, CircleShape)
+                                        )
+                                    } else {
+                                        OrbView(hue = hue, size = 42.dp)
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text(
-                                                text = if (isUniverse) "Evren" else "Karakter",
-                                                color = EmochiPrimary,
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Medium
+                                                text = displayName,
+                                                color = EmochiTextPrimary,
+                                                fontSize = 16.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(if (isUniverse) Color(0xFF2A2C4A) else Color(0xFF1E2038))
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (isUniverse) "Evren" else "Karakter",
+                                                    color = EmochiPrimary,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            }
+
+                                            // Privacy Badge
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(if (bot.isPublic) Color(0xFF1E3A2B) else Color(0xFF381F25))
+                                                    .padding(horizontal = 5.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (bot.isPublic) "🌐 Açık" else "🔒 Özel",
+                                                    color = if (bot.isPublic) Color(0xFF81C784) else Color(0xFFE57373),
+                                                    fontSize = 9.5.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+
+                                        Text(
+                                            text = bot.scenario.ifBlank { bot.openingMessage },
+                                            color = EmochiTextSecondary,
+                                            fontSize = 12.5.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.padding(top = 2.dp)
+                                        )
+                                    }
+
+                                    // Quick Privacy Toggle / Delete Button
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        IconButton(
+                                            onClick = {
+                                                onTogglePrivacy?.invoke(bot.copy(isPublic = !bot.isPublic))
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (bot.isPublic) Icons.Default.Public else Icons.Default.Lock,
+                                                contentDescription = "Gizlilik Değiştir",
+                                                tint = if (bot.isPublic) Color(0xFF81C784) else EmochiTextMuted,
+                                                modifier = Modifier.size(16.dp)
                                             )
                                         }
-                                    }
 
-                                    Text(
-                                        text = bot.scenario.ifBlank { bot.openingMessage },
-                                        color = EmochiTextSecondary,
-                                        fontSize = 12.5.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(top = 2.dp)
-                                    )
-                                }
-
-                                if (confirmDeleteId == bot.id) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        TextButton(onClick = { confirmDeleteId = null }) {
-                                            Text("Vazgeç", color = EmochiTextMuted, fontSize = 11.sp)
+                                        if (confirmDeleteId == bot.id) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                TextButton(onClick = { confirmDeleteId = null }) {
+                                                    Text("Vazgeç", color = EmochiTextMuted, fontSize = 11.sp)
+                                                }
+                                                Button(
+                                                    onClick = {
+                                                        confirmDeleteId = null
+                                                        onDeleteBot(bot.id)
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = EmochiError),
+                                                    shape = RoundedCornerShape(10.dp)
+                                                ) {
+                                                    Text("Sil", color = Color.White, fontSize = 11.sp)
+                                                }
+                                            }
+                                        } else {
+                                            IconButton(onClick = { confirmDeleteId = bot.id }) {
+                                                Icon(
+                                                    Icons.Default.Delete,
+                                                    contentDescription = "Sil",
+                                                    tint = EmochiTextMuted,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
                                         }
-                                        Button(
-                                            onClick = {
-                                                confirmDeleteId = null
-                                                onDeleteBot(bot.id)
-                                            },
-                                            colors = ButtonDefaults.buttonColors(containerColor = EmochiError),
-                                            shape = RoundedCornerShape(10.dp)
-                                        ) {
-                                            Text("Sil", color = Color.White, fontSize = 11.sp)
-                                        }
-                                    }
-                                } else {
-                                    IconButton(onClick = { confirmDeleteId = bot.id }) {
-                                        Icon(
-                                            Icons.Default.Delete,
-                                            contentDescription = "Sil",
-                                            tint = EmochiTextMuted,
-                                            modifier = Modifier.size(18.dp)
-                                        )
                                     }
                                 }
                             }
@@ -500,7 +601,6 @@ fun BotListScreen(
                 }
             }
         }
-    }
     }
 
     if (showGlobalSettings && userSettings != null) {
@@ -605,8 +705,8 @@ fun ExploreTabContent(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Text("🔥 Popüler Topluluk Karakterleri & Evrenler", color = EmochiTextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 4.dp))
-            Text("Hazır karakterlerden birini seçerek anında derin sohbet ve rol yapma simülasyonuna başlayın.", color = EmochiTextSecondary, fontSize = 12.sp)
+            Text("🔥 Popüler Hazır Şablonlar & Evrenler", color = EmochiTextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 4.dp))
+            Text("Hazır karakter ve evren şablonlarından birini seçerek anında sohbet simülasyonuna başlayın.", color = EmochiTextSecondary, fontSize = 12.sp)
         }
 
         items(presets) { preset ->
@@ -637,7 +737,7 @@ fun ExploreTabContent(
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = if (isUniverse) "🌌 Evren" else "🎭 Karakter (${preset.userCharName})",
+                                    text = if (isUniverse) "🌌 Evren Şablonu" else "🎭 Karakter (${preset.userCharName})",
                                     color = EmochiPrimary,
                                     fontSize = 10.5.sp,
                                     fontWeight = FontWeight.Bold
@@ -665,7 +765,7 @@ fun ExploreTabContent(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("⚡ Sohbete Başla", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("⚡ Şablonu Kullan ve Sohbete Başla", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
                 }
             }
