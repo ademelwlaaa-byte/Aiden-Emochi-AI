@@ -3,7 +3,10 @@
     <item
         android:width="72dp"
         android:height="72dp"
-        android:drawable="@drawable/ic_vai_logo"
-        android:gravity="center" />
+        android:gravity="center">
+        <bitmap
+            android:src="@drawable/ic_app_logo"
+            android:gravity="fill" />
+    </item>
 </layer-list>
 
