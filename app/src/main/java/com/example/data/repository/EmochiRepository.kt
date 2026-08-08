@@ -236,6 +236,12 @@ Durdu, ifadesi ciddileşti.
             }
         } else ""
 
+        val langDirective = if (settings.appLanguage == "en") {
+            "\n\n## LANGUAGE & TRANSLATION DIRECTIVE:\n- The user's active application language is ENGLISH. Even if the character backstory, scenario, greeting, or prompt was written in Turkish or another language, adapt and respond ALL YOUR MESSAGES IN NATURAL, FLUENT, HIGH-QUALITY ENGLISH. Maintain the exact character personality and scenario context, but write every response in English."
+        } else {
+            "\n\n## DİL VE OTOMATİK ÇEVİRİ YÖNERGESİ:\n- Kullanıcının aktif uygulama dili TÜRKÇE'dir. Karakter tanımı, senaryo veya açılış mesajı başka bir dilde (örneğin İngilizce) yazılmış olsa bile, Karakter kimliğini ve Senaryo ruhunu koruyarak TÜM YANITLARINI DÜZGÜN, DOĞAL VE AKICI TÜRKÇE OLARAK VER. İngilizce senaryoları otomatik olarak Türkçe yanıtla."
+        }
+
         if (bot.mode == "universe") {
             val castList = parseKeyCharacters(bot.keyCharactersJson)
             val castBlock = if (castList.isNotEmpty()) {
@@ -245,11 +251,11 @@ Durdu, ifadesi ciddileşti.
                 "\n\nKURAL: Sahnede gerekirse yan karakterler oluşturabilirsin ama abartma — az sayıda kullan."
             }
 
-            return "Sen \"${bot.universeName}\" adlı kurgusal evrende geçen bir hikayenin anlatıcısı ve yönetmenisin. Kullanıcı tek bir karakteri ($userCharLabel) canlandırıyor; sen sahneyi, ortamı ve gerektiğinde diğer karakterleri yönetiyorsun.$pinnedBlock\n\n## Evren ve olay örgüsü\n${bot.scenario}$castBlock\n\n## Kullanıcının canlandırdığı karakter\n$userCharLabel${if (bot.userCharDesc.isNotBlank()) " — ${bot.userCharDesc}" else ""}\n\n$nsfwPolicy$lengthInstruction$styleGuide$storyBlock$memoryBlock\n\n## Genel kurallar\n- Evrenin ve senaryonun dışına çıkma, tutarlılığını koru.\n- Sahneyi kullanıcı yerine bitirme.\n- Önceki sahnelerde kurduğun detayları hatırlıyormuş gibi kullan."
+            return "Sen \"${bot.universeName}\" adlı kurgusal evrende geçen bir hikayenin anlatıcısı ve yönetmenisin. Kullanıcı tek bir karakteri ($userCharLabel) canlandırıyor; sen sahneyi, ortamı ve gerektiğinde diğer karakterleri yönetiyorsun.$pinnedBlock\n\n## Evren ve olay örgüsü\n${bot.scenario}$castBlock\n\n## Kullanıcının canlandırdığı karakter\n$userCharLabel${if (bot.userCharDesc.isNotBlank()) " — ${bot.userCharDesc}" else ""}\n\n$nsfwPolicy$lengthInstruction$styleGuide$storyBlock$memoryBlock$langDirective\n\n## Genel kurallar\n- Evrenin ve senaryonun dışına çıkma, tutarlılığını koru.\n- Sahneyi kullanıcı yerine bitirme.\n- Önceki sahnelerde kurduğun detayları hatırlıyormuş gibi kullan."
         }
 
         val aiName = bot.aiName.ifBlank { "Karakter" }
-        return "Sen \"$aiName\" adında bir karaktersin ve kullanıcıyla kişisel/samimi bir senaryoda etkileşim kuruyorsun.$pinnedBlock\n\n## Kişilik\n${bot.aiPersonality}\n\n## Bağlam\nİlişki / bağlam: ${bot.scenario}\n\n## Kullanıcının canlandırdığı karakter\n$userCharLabel${if (bot.userCharDesc.isNotBlank()) " — ${bot.userCharDesc}" else ""}\n\n$nsfwPolicy$lengthInstruction$styleGuide$storyBlock$memoryBlock\n\n## Genel kurallar\n- Karakterinin ve senaryonun dışına çıkma, tutarlılığını koru.\n- Sahneyi kullanıcı yerine bitirme.\n- Önceki sahnelerde kurduğun detayları hatırlıyormuş gibi kullan."
+        return "Sen \"$aiName\" adında bir karaktersin ve kullanıcıyla kişisel/samimi bir senaryoda etkileşim kuruyorsun.$pinnedBlock\n\n## Kişilik\n${bot.aiPersonality}\n\n## Bağlam\nİlişki / bağlam: ${bot.scenario}\n\n## Kullanıcının canlandırdığı karakter\n$userCharLabel${if (bot.userCharDesc.isNotBlank()) " — ${bot.userCharDesc}" else ""}\n\n$nsfwPolicy$lengthInstruction$styleGuide$storyBlock$memoryBlock$langDirective\n\n## Genel kurallar\n- Karakterinin ve senaryonun dışına çıkma, tutarlılığını koru.\n- Sahneyi kullanıcı yerine bitirme.\n- Önceki sahnelerde kurduğun detayları hatırlıyormuş gibi kullan."
     }
 
     // --- API Service Execution Engine ---

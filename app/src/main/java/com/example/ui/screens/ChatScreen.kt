@@ -13,9 +13,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -135,15 +143,16 @@ fun ChatScreen(
         }
     }
 
-    // Automatically ensure opening message exists if list is empty (run once per bot)
-    LaunchedEffect(bot.id) {
-        if (messages.isEmpty()) {
+    // Automatically ensure opening message exists if list is empty
+    LaunchedEffect(bot.id, messages.isEmpty()) {
+        if (messages.isEmpty() && !isSending) {
             onEnsureOpeningMessage()
         }
     }
 
-    // Scroll to bottom on new messages or typing state change
-    LaunchedEffect(messages.size, isSending) {
+    // Scroll to bottom on new messages, typing state change, or keyboard open
+    val keyboardHeight = WindowInsets.ime.getBottom(LocalDensity.current)
+    LaunchedEffect(messages.size, isSending, keyboardHeight) {
         val totalItems = messages.size + if (isSending) 1 else 0
         if (totalItems > 0) {
             try {
@@ -315,8 +324,7 @@ fun ChatScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(EmochiSurface)
-                    .navigationBarsPadding()
-                    .imePadding()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
             ) {
                 // Quick prompt chips
                 val quickPrompts = listOf(

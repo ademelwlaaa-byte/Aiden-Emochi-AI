@@ -133,6 +133,7 @@ fun GlobalSettingsModal(
     var ttsSpeed by remember { mutableStateOf(settings.ttsSpeed) }
     var ttsPitch by remember { mutableStateOf(settings.ttsPitch) }
     var selectedVoiceName by remember { mutableStateOf(settings.selectedVoiceName) }
+    var appLanguage by remember { mutableStateOf(settings.appLanguage) }
 
     var showKeys by remember { mutableStateOf(false) }
 
@@ -587,6 +588,43 @@ fun GlobalSettingsModal(
                 Divider(color = EmochiBorder)
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // Language Selection Section
+                Text(text = "🌐 Uygulama & Yanıt Dili (App Language)", color = EmochiTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "Senaryo veya karakter metinleri hangi dilde yazılırsa yazılsın, yapay zeka seçilen dilde otomatik olarak yanıt verir.",
+                    color = EmochiTextMuted,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    androidx.compose.material3.FilterChip(
+                        selected = appLanguage == "tr",
+                        onClick = { appLanguage = "tr" },
+                        label = { Text("🇹🇷 Türkçe (Varsayılan)", color = if (appLanguage == "tr") Color(0xFF1A1B2E) else EmochiTextPrimary, fontWeight = FontWeight.Bold) },
+                        colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = EmochiPrimary,
+                            containerColor = EmochiCard
+                        )
+                    )
+                    androidx.compose.material3.FilterChip(
+                        selected = appLanguage == "en",
+                        onClick = { appLanguage = "en" },
+                        label = { Text("🇬🇧 English", color = if (appLanguage == "en") Color(0xFF1A1B2E) else EmochiTextPrimary, fontWeight = FontWeight.Bold) },
+                        colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = EmochiPrimary,
+                            containerColor = EmochiCard
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Divider(color = EmochiBorder)
+                Spacer(modifier = Modifier.height(16.dp))
+
                 // API Key Options Section
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -834,7 +872,8 @@ fun GlobalSettingsModal(
                                 enableTts = enableTts,
                                 ttsSpeed = ttsSpeed,
                                 ttsPitch = ttsPitch,
-                                selectedVoiceName = selectedVoiceName
+                                selectedVoiceName = selectedVoiceName,
+                                appLanguage = appLanguage
                             )
                         )
                         onDismiss()

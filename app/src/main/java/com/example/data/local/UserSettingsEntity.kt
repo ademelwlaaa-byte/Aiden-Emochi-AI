@@ -27,6 +27,7 @@ data class UserSettingsEntity(
     val ttsSpeed: Float = 1.0f,
     val ttsPitch: Float = 1.0f,
     val selectedVoiceName: String = "",
+    val appLanguage: String = "tr", // "tr" (Türkçe), "en" (English)
     val totalPromptTokens: Long = 0L,
     val totalCandidateTokens: Long = 0L
 )
