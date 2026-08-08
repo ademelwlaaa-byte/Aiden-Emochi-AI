@@ -360,10 +360,19 @@ Durdu, ifadesi ciddileşti.
         val sanitizedModel = sanitizeModelName(model)
         val geminiContents = formatMessagesForGemini(messages)
 
+        val safetySettings = listOf(
+            com.example.data.api.GeminiSafetySetting("HARM_CATEGORY_HARASSMENT", "BLOCK_NONE"),
+            com.example.data.api.GeminiSafetySetting("HARM_CATEGORY_HATE_SPEECH", "BLOCK_NONE"),
+            com.example.data.api.GeminiSafetySetting("HARM_CATEGORY_SEXUALLY_EXPLICIT", "BLOCK_NONE"),
+            com.example.data.api.GeminiSafetySetting("HARM_CATEGORY_DANGEROUS_CONTENT", "BLOCK_NONE"),
+            com.example.data.api.GeminiSafetySetting("HARM_CATEGORY_CIVIC_INTEGRITY", "BLOCK_NONE")
+        )
+
         val request = GeminiRequest(
             contents = geminiContents,
             systemInstruction = GeminiContent(parts = listOf(GeminiPart(text = systemPrompt))),
-            generationConfig = GeminiGenerationConfig(temperature = 0.85f)
+            generationConfig = GeminiGenerationConfig(temperature = 0.85f),
+            safetySettings = safetySettings
         )
 
         val modelsToTry = listOf(sanitizedModel, "gemini-2.5-flash", "gemini-3.5-flash").distinct()

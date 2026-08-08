@@ -22,10 +22,17 @@ data class GeminiGenerationConfig(
 )
 
 @JsonClass(generateAdapter = true)
+data class GeminiSafetySetting(
+    val category: String,
+    val threshold: String
+)
+
+@JsonClass(generateAdapter = true)
 data class GeminiRequest(
     val contents: List<GeminiContent>,
     val systemInstruction: GeminiContent? = null,
-    val generationConfig: GeminiGenerationConfig? = null
+    val generationConfig: GeminiGenerationConfig? = null,
+    val safetySettings: List<GeminiSafetySetting>? = null
 )
 
 @JsonClass(generateAdapter = true)

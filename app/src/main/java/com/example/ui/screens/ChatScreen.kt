@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -553,7 +554,7 @@ fun ChatScreen(
                                 // Bubble
                                 Box(
                                     modifier = Modifier
-                                        .fillMaxWidth(0.82f)
+                                        .widthIn(min = 70.dp, max = 290.dp)
                                         .clip(
                                             RoundedCornerShape(
                                                 topStart = 16.dp,
@@ -576,7 +577,7 @@ fun ChatScreen(
                                                 bottomEnd = if (isUser) 4.dp else 16.dp
                                             )
                                         )
-                                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                                        .padding(horizontal = 13.dp, vertical = 9.dp)
                                 ) {
                                     Column {
                                         Text(
@@ -588,11 +589,12 @@ fun ChatScreen(
                                         if (timeFormatted.isNotBlank()) {
                                             Text(
                                                 text = timeFormatted,
-                                                color = if (isUser) EmochiUserBubbleText.copy(alpha = 0.7f) else EmochiTextMuted,
-                                                fontSize = 9.5.sp,
+                                                color = if (isUser) EmochiUserBubbleText.copy(alpha = 0.75f) else EmochiTextMuted,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Medium,
                                                 modifier = Modifier
                                                     .align(Alignment.End)
-                                                    .padding(top = 4.dp)
+                                                    .padding(top = 3.dp)
                                             )
                                         }
                                     }

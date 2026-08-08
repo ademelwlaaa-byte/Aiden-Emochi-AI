@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -52,6 +54,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -1536,6 +1540,8 @@ fun NeuralVaultModal(
     var category by remember { mutableStateOf("Bilgi (Core)") }
     var memoryText by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
+    var showCategoryPicker by remember { mutableStateOf(false) }
+    var categoryFilter by remember { mutableStateOf("Tümü") }
     
     var pinnedMemoryText by remember { mutableStateOf(bot.pinnedMemory) }
     
@@ -1556,9 +1562,11 @@ fun NeuralVaultModal(
     }
     
     val filteredMemories = memoriesList.filter { (key, cat, body) ->
-        searchQuery.isBlank() || key.contains(searchQuery, ignoreCase = true) ||
+        val matchesCategory = categoryFilter == "Tümü" || cat.contains(categoryFilter, ignoreCase = true) || (categoryFilter == "Bilgi (Core)" && (cat.contains("BİLGİ", ignoreCase = true) || cat.contains("CORE", ignoreCase = true)))
+        val matchesSearch = searchQuery.isBlank() || key.contains(searchQuery, ignoreCase = true) ||
                 cat.contains(searchQuery, ignoreCase = true) ||
                 body.contains(searchQuery, ignoreCase = true)
+        matchesCategory && matchesSearch
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -1656,14 +1664,82 @@ fun NeuralVaultModal(
                                 colors = customTextFieldColors(),
                                 singleLine = true
                             )
-                            OutlinedTextField(
-                                value = category,
-                                onValueChange = { category = it },
-                                placeholder = { Text("Bilgi (Core)", color = Color.Gray, fontSize = 11.5.sp) },
-                                modifier = Modifier.weight(1f),
-                                colors = customTextFieldColors(),
-                                singleLine = true
-                            )
+                            
+                            // Category Selector Field (Opens Popup Matching Screenshot 1)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF1E1E28))
+                                    .border(1.dp, Color(0xFF333344), RoundedCornerShape(8.dp))
+                                    .clickable { showCategoryPicker = true }
+                                    .padding(horizontal = 12.dp, vertical = 14.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = category,
+                                        color = Color.White,
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Icon(
+                                        Icons.Default.ArrowDropDown,
+                                        contentDescription = "Kategori Seç",
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Hazır Seçenekler / Şablonlar
+                        val quickPresets = listOf(
+                            Triple("TAKMA İSİM", "Bilgi (Core)", "Kullanıcıya özel samimi bir unvan veya takma isimle hitap eder."),
+                            Triple("GİZLİ DUYGU", "İlişki", "Kullanıcıya karşı derin bir çekim ve gizli bir bağlılık hisseder."),
+                            Triple("GEÇMİŞ SIR", "Biyografi", "Geçmişte yaşadığı kırılma noktasını sadece kullanıcıya anlatmıştır."),
+                            Triple("ÖZEL MEKAN", "Dünya/Mekan", "Yalnızca ikisinin bildiği gizli ve tenha bir buluşma noktaları vardır."),
+                            Triple("YETİŞKİN RP", "İlişki", "Yetişkin etkileşimlerde filtresiz, tutkulu ve tabusuz bir yakınlık benimser."),
+                            Triple("SADAKAT BAĞI", "İlişki", "Kullanıcıya koşulsuz sadakat gösterir ve onu her koşulda korur.")
+                        )
+
+                        Text(
+                            text = "HAZIR SEÇENEKLER & ŞABLONLAR",
+                            color = Color(0xFF80CBC4),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            quickPresets.forEach { (presetKey, presetCat, presetDesc) ->
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFF212130))
+                                        .border(1.dp, Color(0xFF38384D), RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            keyword = presetKey
+                                            category = presetCat
+                                            memoryText = presetDesc
+                                        }
+                                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF80CBC4), modifier = Modifier.size(11.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(presetKey, color = Color.White, fontSize = 10.5.sp, fontWeight = FontWeight.Medium)
+                                    }
+                                }
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -1684,7 +1760,7 @@ fun NeuralVaultModal(
                             onClick = {
                                 if (memoryText.isNotBlank()) {
                                     val keyTag = keyword.ifBlank { "BELLEK" }.uppercase()
-                                    val catTag = category.ifBlank { "BİLGİ" }.uppercase()
+                                    val catTag = category.ifBlank { "BİLGİ (CORE)" }.uppercase()
                                     val newEntry = "$keyTag ::: $catTag ::: ${memoryText.trim()}"
                                     val newPinned = if (pinnedMemoryText.isBlank()) newEntry else "$pinnedMemoryText\n$newEntry"
                                     pinnedMemoryText = newPinned
@@ -1704,6 +1780,35 @@ fun NeuralVaultModal(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
+
+                // Category Filter Chips
+                val presetCategories = listOf("Tümü", "Bilgi (Core)", "Biyografi", "İlişki", "Dünya/Mekan")
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(bottom = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    presetCategories.forEach { cat ->
+                        val isSelected = categoryFilter == cat
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (isSelected) Color(0xFF2196F3) else Color(0xFF1E1E28))
+                                .border(1.dp, if (isSelected) Color(0xFF2196F3) else Color(0xFF2E2E3E), RoundedCornerShape(12.dp))
+                                .clickable { categoryFilter = cat }
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = cat,
+                                color = if (isSelected) Color.White else Color.LightGray,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
 
                 // Search Bar
                 OutlinedTextField(
@@ -1788,6 +1893,84 @@ fun NeuralVaultModal(
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showCategoryPicker) {
+        Dialog(onDismissRequest = { showCategoryPicker = false }) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C34)),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp)
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Neural Vault",
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(
+                            onClick = { showCategoryPicker = false },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Kapat", tint = Color.LightGray)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    val pickerCategories = listOf(
+                        "Bilgi (Core)",
+                        "Biyografi",
+                        "İlişki",
+                        "Dünya/Mekan"
+                    )
+
+                    pickerCategories.forEachIndexed { index, cat ->
+                        val isSelected = category == cat
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    category = cat
+                                    showCategoryPicker = false
+                                }
+                                .padding(vertical = 14.dp, horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = cat,
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                            )
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = {
+                                    category = cat
+                                    showCategoryPicker = false
+                                },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = Color(0xFF80CBC4),
+                                    unselectedColor = Color.Gray
+                                )
+                            )
+                        }
+                        if (index < pickerCategories.size - 1) {
+                            Divider(color = Color(0xFF3F3F4C), thickness = 0.8.dp)
                         }
                     }
                 }
