@@ -1,9 +1,8 @@
 package com.example.data.local
 
 import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -17,10 +16,10 @@ interface MessageDao {
     @Query("SELECT * FROM messages")
     suspend fun getAllMessagesList(): List<MessageEntity>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun insertMessage(message: MessageEntity)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun insertAllMessages(messages: List<MessageEntity>)
 
     @Query("DELETE FROM messages WHERE id = :id")

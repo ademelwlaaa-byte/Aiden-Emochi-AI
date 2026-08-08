@@ -1,9 +1,8 @@
 package com.example.data.local
 
 import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -20,7 +19,7 @@ interface BotDao {
     @Query("SELECT * FROM bots WHERE id = :id")
     fun getBotByIdFlow(id: String): Flow<BotEntity?>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun insertOrUpdate(bot: BotEntity)
 
     @Query("DELETE FROM bots WHERE id = :id")
