@@ -92,6 +92,8 @@ class EmochiRepository(private val db: AppDatabase) {
                 intensity = "normal",
                 customLength = "default",
                 isNsfw = true,
+                isPublic = false,
+                isTemplate = true,
                 pinnedMemory = "Ayla her zaman içten ve samimidir. Sencer'e çok değer verir.",
                 updatedAt = now
             )
@@ -111,6 +113,8 @@ class EmochiRepository(private val db: AppDatabase) {
                 intensity = "normal",
                 customLength = "default",
                 isNsfw = true,
+                isPublic = false,
+                isTemplate = true,
                 pinnedMemory = "Aetheria evreninde yüksek teknoloji ile kadim sihir iç içedir.",
                 updatedAt = now - 1000
             )
@@ -134,6 +138,14 @@ class EmochiRepository(private val db: AppDatabase) {
             )
             messageDao.insertMessage(msg1)
             messageDao.insertMessage(msg2)
+        } else {
+            for (bot in existingBots) {
+                if (bot.id.startsWith("starter_") || bot.id.startsWith("preset_") || bot.isTemplate) {
+                    if (bot.isPublic || !bot.isTemplate) {
+                        botDao.insertOrUpdate(bot.copy(isPublic = false, isTemplate = true))
+                    }
+                }
+            }
         }
     }
 
@@ -242,6 +254,10 @@ Durdu, ifadesi ciddileşti.
             "\n\n## DİL VE OTOMATİK ÇEVİRİ YÖNERGESİ:\n- Kullanıcının aktif uygulama dili TÜRKÇE'dir. Karakter tanımı, senaryo veya açılış mesajı başka bir dilde (örneğin İngilizce) yazılmış olsa bile, Karakter kimliğini ve Senaryo ruhunu koruyarak TÜM YANITLARINI DÜZGÜN, DOĞAL VE AKICI TÜRKÇE OLARAK VER. İngilizce senaryoları otomatik olarak Türkçe yanıtla."
         }
 
+        val oocDirective = if (bot.enableOoc && settings.enableOoc) {
+            "\n\n## PARANTEZ İÇİ YÖNLENDİRME / OOC (OUT OF CHARACTER) YÖNERGESİ:\n- Kullanıcının mesajında parantez içinde \"(...)\" veya \"[...]\" yazdığı ifadeler hikaye dışı (OOC / Meta Yönlendirme) talimatlar ve AI yönlendirmeleridir.\n- Örnek: \"(Ayla bu sırada kapıyı kilitlesin)\" veya \"(Sahneyi akşam vaktine taşıyalım)\" veya \"(Daha soğuk tepki ver)\".\n- Parantez içindeki bu talimatları SİSTEM VE YÖNERGE TALİMATI olarak algıla. Karakter diyalogunda \"neden parantez açtın\" veya \"tamam şöyle yapıyorum\" deme! Doğrudan talimatı sahneye, karaktere ve aksiyona dürüstçe uygula."
+        } else ""
+
         if (bot.mode == "universe") {
             val castList = parseKeyCharacters(bot.keyCharactersJson)
             val castBlock = if (castList.isNotEmpty()) {
@@ -251,11 +267,11 @@ Durdu, ifadesi ciddileşti.
                 "\n\nKURAL: Sahnede gerekirse yan karakterler oluşturabilirsin ama abartma — az sayıda kullan."
             }
 
-            return "Sen \"${bot.universeName}\" adlı kurgusal evrende geçen bir hikayenin anlatıcısı ve yönetmenisin. Kullanıcı tek bir karakteri ($userCharLabel) canlandırıyor; sen sahneyi, ortamı ve gerektiğinde diğer karakterleri yönetiyorsun.$pinnedBlock\n\n## Evren ve olay örgüsü\n${bot.scenario}$castBlock\n\n## Kullanıcının canlandırdığı karakter\n$userCharLabel${if (bot.userCharDesc.isNotBlank()) " — ${bot.userCharDesc}" else ""}\n\n$nsfwPolicy$lengthInstruction$styleGuide$storyBlock$memoryBlock$langDirective\n\n## Genel kurallar\n- Evrenin ve senaryonun dışına çıkma, tutarlılığını koru.\n- Sahneyi kullanıcı yerine bitirme.\n- Önceki sahnelerde kurduğun detayları hatırlıyormuş gibi kullan."
+            return "Sen \"${bot.universeName}\" adlı kurgusal evrende geçen bir hikayenin anlatıcısı ve yönetmenisin. Kullanıcı tek bir karakteri ($userCharLabel) canlandırıyor; sen sahneyi, ortamı ve gerektiğinde diğer karakterleri yönetiyorsun.$pinnedBlock\n\n## Evren ve olay örgüsü\n${bot.scenario}$castBlock\n\n## Kullanıcının canlandırdığı karakter\n$userCharLabel${if (bot.userCharDesc.isNotBlank()) " — ${bot.userCharDesc}" else ""}\n\n$nsfwPolicy$lengthInstruction$styleGuide$storyBlock$memoryBlock$oocDirective$langDirective\n\n## Genel kurallar\n- Evrenin ve senaryonun dışına çıkma, tutarlılığını koru.\n- Sahneyi kullanıcı yerine bitirme.\n- Önceki sahnelerde kurduğun detayları hatırlıyormuş gibi kullan."
         }
 
         val aiName = bot.aiName.ifBlank { "Karakter" }
-        return "Sen \"$aiName\" adında bir karaktersin ve kullanıcıyla kişisel/samimi bir senaryoda etkileşim kuruyorsun.$pinnedBlock\n\n## Kişilik\n${bot.aiPersonality}\n\n## Bağlam\nİlişki / bağlam: ${bot.scenario}\n\n## Kullanıcının canlandırdığı karakter\n$userCharLabel${if (bot.userCharDesc.isNotBlank()) " — ${bot.userCharDesc}" else ""}\n\n$nsfwPolicy$lengthInstruction$styleGuide$storyBlock$memoryBlock$langDirective\n\n## Genel kurallar\n- Karakterinin ve senaryonun dışına çıkma, tutarlılığını koru.\n- Sahneyi kullanıcı yerine bitirme.\n- Önceki sahnelerde kurduğun detayları hatırlıyormuş gibi kullan."
+        return "Sen \"$aiName\" adında bir karaktersin ve kullanıcıyla kişisel/samimi bir senaryoda etkileşim kuruyorsun.$pinnedBlock\n\n## Kişilik\n${bot.aiPersonality}\n\n## Bağlam\nİlişki / bağlam: ${bot.scenario}\n\n## Kullanıcının canlandırdığı karakter\n$userCharLabel${if (bot.userCharDesc.isNotBlank()) " — ${bot.userCharDesc}" else ""}\n\n$nsfwPolicy$lengthInstruction$styleGuide$storyBlock$memoryBlock$oocDirective$langDirective\n\n## Genel kurallar\n- Karakterinin ve senaryonun dışına çıkma, tutarlılığını koru.\n- Sahneyi kullanıcı yerine bitirme.\n- Önceki sahnelerde kurduğun detayları hatırlıyormuş gibi kullan."
     }
 
     // --- API Service Execution Engine ---

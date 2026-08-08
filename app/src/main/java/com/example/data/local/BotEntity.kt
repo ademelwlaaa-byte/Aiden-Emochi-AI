@@ -21,7 +21,9 @@ data class BotEntity(
     val isNsfw: Boolean = true, // +18 / Filtresiz RP
     val avatarUrl: String = "",
     val chatBgUrl: String = "", // Bot sohbet arka planı
-    val isPublic: Boolean = true, // Herkese açık mı yoksa sadece kendine özel mi?
+    val isPublic: Boolean = false, // Herkese açık mı yoksa sadece kendine özel mi? (Varsayılan kişiye özel)
+    val isTemplate: Boolean = false, // Şablon veya hazır varsayılan bot mu?
+    val enableOoc: Boolean = true, // Parantez İçi Yönlendirme / OOC Modu (... Bu böyle olmalı)
     val pinnedMemory: String = "",
     val storyNotes: String = "",
     val memoryNotes: String = "",

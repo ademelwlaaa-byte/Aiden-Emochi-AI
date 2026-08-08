@@ -16,6 +16,7 @@ data class UserSettingsEntity(
     val fallbackModel: String = "gemini-2.5-flash",
     val responseLength: String = "standard", // "short", "standard", "long"
     val enableNsfw: Boolean = true, // +18 / Filtresiz RP modu
+    val enableOoc: Boolean = true, // Parantez İçi Yönlendirme Modu (... Bu böyle olmalı)
     val enableFlirty: Boolean = true, // Çapkınlık (Flirty)
     val enableHardcore: Boolean = true, // Sert Mod (Hardcore)
     val enableFetish: Boolean = false, // Fantezi (Fetish)

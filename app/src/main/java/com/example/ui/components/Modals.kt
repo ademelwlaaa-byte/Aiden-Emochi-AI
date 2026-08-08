@@ -122,6 +122,7 @@ fun GlobalSettingsModal(
     var fallbackModel by remember { mutableStateOf(settings.fallbackModel) }
     var responseLength by remember { mutableStateOf(settings.responseLength) }
     var enableNsfw by remember { mutableStateOf(settings.enableNsfw) }
+    var enableOoc by remember { mutableStateOf(settings.enableOoc) }
     var enableFlirty by remember { mutableStateOf(settings.enableFlirty) }
     var enableHardcore by remember { mutableStateOf(settings.enableHardcore) }
     var enableFetish by remember { mutableStateOf(settings.enableFetish) }
@@ -409,6 +410,48 @@ fun GlobalSettingsModal(
                             checkedTrackColor = EmochiPrimary
                         )
                     )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Parantez İçi OOC Yönlendirme Switch
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = EmochiCard),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, EmochiBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "💬 (... Parantez İçi OOC Yönlendirme)",
+                                color = EmochiTextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Sohbet esnasında parantez içindeki (... Bu böyle olmalı) ifadelerini AI'a hikaye dışı meta yönlendirme komutu olarak iletir.",
+                                color = EmochiTextMuted,
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp,
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+                        Switch(
+                            checked = enableOoc,
+                            onCheckedChange = { enableOoc = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFF1A1B2E),
+                                checkedTrackColor = EmochiPrimary
+                            )
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -862,6 +905,7 @@ fun GlobalSettingsModal(
                                 fallbackModel = fallbackModel,
                                 responseLength = responseLength,
                                 enableNsfw = enableNsfw,
+                                enableOoc = enableOoc,
                                 enableFlirty = enableFlirty,
                                 enableHardcore = enableHardcore,
                                 enableFetish = enableFetish,
@@ -1075,6 +1119,7 @@ fun BotSettingsModal(
     var intensity by remember { mutableStateOf(bot.intensity) }
     var customLength by remember { mutableStateOf(bot.customLength) }
     var isNsfw by remember { mutableStateOf(bot.isNsfw) }
+    var enableOoc by remember { mutableStateOf(bot.enableOoc) }
     var avatarUrl by remember { mutableStateOf(bot.avatarUrl) }
     var chatBgUrl by remember { mutableStateOf(bot.chatBgUrl) }
     var isPublic by remember { mutableStateOf(bot.isPublic) }
@@ -1408,6 +1453,47 @@ fun BotSettingsModal(
                     )
                 }
 
+                // Per Bot OOC Parantez İçi Switch Card
+                Spacer(modifier = Modifier.height(10.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = EmochiCard),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, EmochiBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "💬 (... Parantez İçi Yönlendirme / OOC)",
+                                color = EmochiTextPrimary,
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Mesajınızdaki parantez içi (... Bu böyle olmalı) ifadelerini hikaye dışı AI komutu kabul eder.",
+                                color = EmochiTextMuted,
+                                fontSize = 11.sp,
+                                lineHeight = 14.sp,
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+                        Switch(
+                            checked = enableOoc,
+                            onCheckedChange = { enableOoc = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFF1A1B2E),
+                                checkedTrackColor = EmochiPrimary
+                            )
+                        )
+                    }
+                }
+
                 if (bot.mode == "universe") {
                     Spacer(modifier = Modifier.height(12.dp))
                     Text("Karakter Kadrosu", color = EmochiTextPrimary, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
@@ -1537,6 +1623,7 @@ fun BotSettingsModal(
                             intensity = intensity,
                             customLength = customLength,
                             isNsfw = isNsfw,
+                            enableOoc = enableOoc,
                             avatarUrl = avatarUrl,
                             chatBgUrl = chatBgUrl,
                             isPublic = isPublic,
