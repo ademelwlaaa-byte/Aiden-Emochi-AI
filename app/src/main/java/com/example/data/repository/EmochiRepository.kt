@@ -47,6 +47,14 @@ class EmochiRepository(private val db: AppDatabase) {
     )
     private val backupAdapter = moshi.adapter(BackupSnapshot::class.java)
 
+    private fun getBuildConfigKey(): String {
+        return try {
+            BuildConfig.GEMINI_API_KEY.trim()
+        } catch (_: Throwable) {
+            ""
+        }
+    }
+
     val allBots: Flow<List<BotEntity>> = botDao.getAllBots()
     val userSettingsFlow: Flow<UserSettingsEntity?> = settingsDao.getUserSettingsFlow()
 
@@ -579,7 +587,7 @@ Durdu, ifadesi ciddileşti.
         // Auto Fallback to Gemini Secondary Model
         val fallbackModel = sanitizeModelName(settings.fallbackModel.ifBlank { "gemini-2.5-flash" })
         val customKey = settings.customApiKey.trim()
-        val buildConfigKey = BuildConfig.GEMINI_API_KEY.trim()
+        val buildConfigKey = getBuildConfigKey()
         val backupKey = settings.backupApiKey.trim()
 
         val primaryKey = if (customKey.isNotBlank()) customKey else buildConfigKey
@@ -634,7 +642,7 @@ Durdu, ifadesi ciddileşti.
             // Default Gemini Models
             else -> {
                 val customKey = settings.customApiKey.trim()
-                val buildConfigKey = BuildConfig.GEMINI_API_KEY.trim()
+                val buildConfigKey = getBuildConfigKey()
                 val backupKey = settings.backupApiKey.trim()
 
                 val primaryKey = if (customKey.isNotBlank()) customKey else buildConfigKey
@@ -679,7 +687,7 @@ Durdu, ifadesi ciddileşti.
         if (messages.size < 6) return@withContext
 
         val settings = getOrCreateSettings()
-        val apiKey = if (settings.customApiKey.isNotBlank()) settings.customApiKey else BuildConfig.GEMINI_API_KEY
+        val apiKey = if (settings.customApiKey.isNotBlank()) settings.customApiKey else getBuildConfigKey()
         if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") return@withContext
 
         val aiName = if (bot.mode == "universe") bot.universeName else bot.aiName
