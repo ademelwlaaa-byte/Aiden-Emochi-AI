@@ -982,16 +982,6 @@ fun ExploreTabContent(
 
 @Composable
 fun SafeAppLogo(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val imageBitmap = remember(context) {
-        try {
-            val drawable = ContextCompat.getDrawable(context, R.drawable.ic_vai_logo)
-            drawable?.toBitmap()?.asImageBitmap()
-        } catch (e: Throwable) {
-            null
-        }
-    }
-
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
@@ -999,32 +989,12 @@ fun SafeAppLogo(modifier: Modifier = Modifier) {
             .border(1.dp, EmochiBorder, RoundedCornerShape(10.dp)),
         contentAlignment = Alignment.Center
     ) {
-        if (imageBitmap != null) {
-            Image(
-                bitmap = imageBitmap,
-                contentDescription = "Velora Ado AI Logo",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.linearGradient(
-                            listOf(EmochiPrimary.copy(alpha = 0.3f), Color(0xFF7C4DFF).copy(alpha = 0.3f))
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.SmartToy,
-                    contentDescription = "Velora Ado AI Logo",
-                    tint = EmochiPrimary,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
+        Image(
+            painter = painterResource(id = R.drawable.ic_vai_logo),
+            contentDescription = "Velora Ado AI Logo",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 
