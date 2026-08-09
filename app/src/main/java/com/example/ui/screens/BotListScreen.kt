@@ -813,6 +813,23 @@ fun ExploreTabContent(
         listOf(
             BotEntity(
                 id = java.util.UUID.randomUUID().toString(),
+                mode = "universe",
+                aiName = "Aiden Blackwood Stories",
+                aiPersonality = "Aiden Blackwood evreninin atmosferik, karanlık, gerilim dolu ve derin hikaye anlatıcısı.",
+                scenario = "🔮 Aiden Blackwood Evreni: Gizemli olaylar, gölgelerde saklanan gerçeler ve unutulmuş anlatılar. Özel şablon hazır botların senaryoları buraya yüklenecektir.",
+                universeName = "Aiden Blackwood Stories",
+                keyCharactersJson = "[]",
+                userCharName = "Gezgin",
+                userCharDesc = "Blackwood kasabasına ve malikanesine ilk kez adım atan meraklı araştırmacı.",
+                openingMessage = "*Sisli Blackwood kasabasının taş yollarında adımların yankılanıyor. Önünde yükselen antika ahşap kapıda pirinç bir levha çakılı: 'Aiden Blackwood Stories'. Kapıyı araladığında içeriden hafif bir piyano melodisi ve eski kitap kokusu yükseliyor...* Hoş geldin. Hangi hikayeyi aralamaya geldin?",
+                writingStyle = "rp",
+                intensity = "intense",
+                isPublic = false,
+                isTemplate = true,
+                pinnedMemory = "EVREN ::: AIDEN BLACKWOOD ::: Kasabanın gizemli geçmişi ve anlatılmamış özel hikayeleri."
+            ),
+            BotEntity(
+                id = java.util.UUID.randomUUID().toString(),
                 mode = "personal",
                 aiName = "Aria",
                 aiPersonality = "Zeki, doğrudan konuşan, gizemli, alaycı ama içten içe sadık.",
@@ -989,8 +1006,8 @@ fun SafeAppLogo(modifier: Modifier = Modifier) {
             .border(1.dp, EmochiBorder, RoundedCornerShape(10.dp)),
         contentAlignment = Alignment.Center
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.ic_vai_logo),
+        AsyncImage(
+            model = R.drawable.ic_vai_logo,
             contentDescription = "Velora Ado AI Logo",
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
