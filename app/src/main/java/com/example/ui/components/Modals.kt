@@ -1,5 +1,5 @@
 package com.example.ui.components
-
+import androidx.compose.ui.window.DialogProperties
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
