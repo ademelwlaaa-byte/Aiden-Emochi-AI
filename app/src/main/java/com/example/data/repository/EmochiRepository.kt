@@ -166,13 +166,24 @@ class EmochiRepository(private val db: AppDatabase) {
         return settings
     }
 
-    private suspend fun recordTokenUsage(promptTokens: Long, candidateTokens: Long) {
+    private suspend fun recordTokenUsage(botId: String? = null, promptTokens: Long, candidateTokens: Long) {
         val current = getOrCreateSettings()
         val updated = current.copy(
             totalPromptTokens = current.totalPromptTokens + promptTokens,
             totalCandidateTokens = current.totalCandidateTokens + candidateTokens
         )
         settingsDao.insertOrUpdate(updated)
+
+        if (!botId.isNullOrBlank()) {
+            val bot = botDao.getBotById(botId)
+            if (bot != null) {
+                val updatedBot = bot.copy(
+                    totalPromptTokens = bot.totalPromptTokens + promptTokens,
+                    totalCandidateTokens = bot.totalCandidateTokens + candidateTokens
+                )
+                botDao.insertOrUpdate(updatedBot)
+            }
+        }
     }
 
     fun parseKeyCharacters(json: String): List<KeyCharacter> {
@@ -257,9 +268,25 @@ Durdu, ifadesi ciddileşti.
         } else ""
 
         val langDirective = if (settings.appLanguage == "en") {
-            "\n\n## LANGUAGE & TRANSLATION DIRECTIVE:\n- The user's active application language is ENGLISH. Even if the character backstory, scenario, greeting, or prompt was written in Turkish or another language, adapt and respond ALL YOUR MESSAGES IN NATURAL, FLUENT, HIGH-QUALITY ENGLISH. Maintain the exact character personality and scenario context, but write every response in English."
+            """
+
+            ## MANDATORY LANGUAGE OVERRIDE (USER APP LANGUAGE = ENGLISH):
+            - The active user application language setting is ENGLISH ("en").
+            - REGARDLESS of the original language of the character backstory, universe scenario, initial message, memory notes, or user input (even if written in Turkish or another language):
+              1. ALL YOUR RESPONSES MUST BE 100% IN FLUENT, NATURAL, HIGH-QUALITY ENGLISH.
+              2. Translate all scenario actions, dialogue, character thoughts, and narrator descriptions seamlessly into English in real-time.
+              3. Never produce Turkish text in your output when the app language is set to English.
+            """.trimIndent()
         } else {
-            "\n\n## DİL VE OTOMATİK ÇEVİRİ YÖNERGESİ:\n- Kullanıcının aktif uygulama dili TÜRKÇE'dir. Karakter tanımı, senaryo veya açılış mesajı başka bir dilde (örneğin İngilizce) yazılmış olsa bile, Karakter kimliğini ve Senaryo ruhunu koruyarak TÜM YANITLARINI DÜZGÜN, DOĞAL VE AKICI TÜRKÇE OLARAK VER. İngilizce senaryoları otomatik olarak Türkçe yanıtla."
+            """
+
+            ## MUTLAK DİL VE ZORUNLU ÇEVİRİ KURALI (UYGULAMA DİLİ = TÜRKÇE):
+            - Kullanıcının aktif uygulama dili TÜRKÇE ("tr")'dir.
+            - Karakter tanımı, senaryo detayları, açılış mesajı, hafıza notları veya kullanıcı girdisi İngilizce ya da başka bir dilde yazılmış olsa dahi:
+              1. TÜM YANITLARINI %100 MÜKEMMEL, DOĞAL VE AKICI TÜRKÇE OLARAK ÜRET.
+              2. İngilizce yazılmış tüm senaryo eylemlerini, diyalogları, iç düşünceleri ve anlatımı anında Türkçe'ye çevirerek sun.
+              3. Dil Türkçe seçiliyken yanıtlarında asla İngilizce veya yabancı dilde metin üretme.
+            """.trimIndent()
         }
 
         val oocDirective = if (bot.enableOoc && settings.enableOoc) {
@@ -292,6 +319,148 @@ Durdu, ifadesi ciddileşti.
             clean.isEmpty() -> "gemini-2.5-flash"
             else -> model.trim()
         }
+    }
+
+    // --- Context Window & Token Management Engine ---
+
+    fun getModelContextLimit(model: String): Int {
+        val m = model.trim().lowercase()
+        return when {
+            m.contains("claude-3-5-sonnet") || m.contains("claude-3-5-haiku") || m.contains("claude-3-opus") -> 200_000
+            m.contains("gpt-4o") || m.contains("o1") || m.contains("o3-mini") -> 128_000
+            m.contains("gemini") -> 1_000_000
+            m.contains("deepseek") -> 64_000
+            m.contains("llama-3.3") || m.contains("llama-3.1") -> 128_000
+            m.contains("llama") || m.contains("groq") || m.contains("mixtral") -> 32_768
+            else -> 32_000
+        }
+    }
+
+    fun estimateTokenCount(text: String): Int {
+        if (text.isBlank()) return 0
+        return (text.length / 3.5).toInt().coerceAtLeast(1)
+    }
+
+    fun estimateTotalTokens(systemPrompt: String, messages: List<MessageEntity>): Int {
+        var count = estimateTokenCount(systemPrompt)
+        for (msg in messages) {
+            count += estimateTokenCount(msg.text) + 4
+        }
+        return count
+    }
+
+    private suspend fun prepareContextAndSummarizeIfNeeded(
+        bot: BotEntity,
+        messages: List<MessageEntity>,
+        modelName: String
+    ): Pair<BotEntity, List<MessageEntity>> {
+        if (messages.size <= 8) return Pair(bot, messages)
+
+        val modelLimit = getModelContextLimit(modelName)
+        val maxBudgetTokens = (modelLimit * 0.75).toInt().coerceAtMost(24_000)
+
+        val currentSysPrompt = buildSystemPrompt(bot, getOrCreateSettings())
+        val currentTokens = estimateTotalTokens(currentSysPrompt, messages)
+
+        if (currentTokens > maxBudgetTokens || messages.size > 22) {
+            val keepCount = 12
+            val olderMessages = messages.dropLast(keepCount)
+            val recentMessages = messages.takeLast(keepCount)
+
+            if (olderMessages.isNotEmpty()) {
+                val updatedBot = summarizeAndArchiveOlderMessages(bot, olderMessages)
+                return Pair(updatedBot, recentMessages)
+            }
+        }
+
+        return Pair(bot, messages)
+    }
+
+    private suspend fun summarizeAndArchiveOlderMessages(
+        bot: BotEntity,
+        olderMessages: List<MessageEntity>
+    ): BotEntity {
+        val settings = getOrCreateSettings()
+        val selectedModel = sanitizeModelName(settings.selectedModel.ifBlank { "gemini-2.5-flash" })
+
+        val aiName = if (bot.mode == "universe") bot.universeName else bot.aiName
+        val userLabel = bot.userCharName.ifBlank { "Kullanıcı" }
+
+        val recapText = olderMessages.joinToString("\n") { m ->
+            val sender = if (m.role == "user") userLabel else aiName
+            "$sender: ${m.text}"
+        }
+
+        val prompt = "Aşağıdaki geçmiş sahne mesajlarından önemli gelişmeleri ve olay örgüsünü özetle ve SADECE şu formatta yaz:\n\nDURUM:\n- (yan karakterler, mekanlar, çözülmemiş konular — en fazla 5 madde)\n\nHAFIZA:\n- (duygusal gelişmeler, ilişki değişimleri, verilen sözler — en fazla 5 madde)"
+
+        var updatedBot = bot
+        var summarizationSucceeded = false
+
+        // 1. AI Tabanlı Özetleme Denemesi (Aktif Sağlayıcı / Model Üzerinden)
+        try {
+            val requestMsgs = listOf(MessageEntity(id = "sum_old", botId = bot.id, role = "user", text = "$prompt\n\nGEÇMİŞ SAHNE:\n$recapText", timestamp = 0L))
+            val res = executeModelRequest(selectedModel, settings, "Sen yardımcı bir hafıza ve olay özetleyicisin.", requestMsgs, botId = bot.id)
+            recordTokenUsage(bot.id, res.second.first, res.second.second)
+            val raw = res.first
+
+            if (raw.contains("DURUM:", ignoreCase = true) || raw.contains("HAFIZA:", ignoreCase = true)) {
+                val durumMatch = raw.split(Regex("HAFIZA:", RegexOption.IGNORE_CASE))[0]
+                    .replace(Regex("DURUM:", RegexOption.IGNORE_CASE), "").trim()
+
+                val hafizaMatch = raw.split(Regex("HAFIZA:", RegexOption.IGNORE_CASE)).getOrNull(1)?.trim() ?: ""
+
+                val newStory = listOf(bot.storyNotes, durumMatch).filter { it.isNotBlank() }.joinToString("\n")
+                    .lines().takeLast(25).joinToString("\n")
+
+                val newMemory = listOf(bot.memoryNotes, hafizaMatch).filter { it.isNotBlank() }.joinToString("\n")
+                    .lines().takeLast(25).joinToString("\n")
+
+                updatedBot = bot.copy(
+                    storyNotes = newStory,
+                    memoryNotes = newMemory,
+                    updatedAt = System.currentTimeMillis()
+                )
+                botDao.insertOrUpdate(updatedBot)
+                summarizationSucceeded = true
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            summarizationSucceeded = false
+        }
+
+        // 2. Yerel Kırpma / Arşivleme Fallback (AI Bağlantısı veya Key Olmadığında)
+        if (!summarizationSucceeded) {
+            try {
+                val localSummaryHeader = "[Önceki Konuşma Arşivi]"
+                val sampleOldMsgs = olderMessages.takeLast(8).joinToString("\n") { m ->
+                    val sender = if (m.role == "user") userLabel else aiName
+                    val snippet = if (m.text.length > 80) m.text.take(80) + "..." else m.text
+                    "- $sender: $snippet"
+                }
+                val fallbackStorySnippet = "$localSummaryHeader\n$sampleOldMsgs"
+
+                val combinedStory = listOf(bot.storyNotes, fallbackStorySnippet).filter { it.isNotBlank() }
+                    .joinToString("\n").lines().takeLast(25).joinToString("\n")
+
+                updatedBot = bot.copy(
+                    storyNotes = combinedStory,
+                    updatedAt = System.currentTimeMillis()
+                )
+                botDao.insertOrUpdate(updatedBot)
+                summarizationSucceeded = true
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        // 3. Eski Mesajları Veritabanından Temizleme
+        if (summarizationSucceeded) {
+            for (m in olderMessages) {
+                messageDao.deleteMessageById(m.id)
+            }
+        }
+
+        return updatedBot
     }
 
     private fun formatMessagesForGemini(messages: List<MessageEntity>): List<GeminiContent> {
@@ -567,15 +736,17 @@ Durdu, ifadesi ciddileşti.
         messages: List<MessageEntity>
     ): String = withContext(Dispatchers.IO) {
         val settings = getOrCreateSettings()
-        val systemPrompt = buildSystemPrompt(bot, settings)
-
         val selectedModel = sanitizeModelName(settings.selectedModel.ifBlank { "gemini-2.5-flash" })
+
+        // Context Window & Token Budget Management
+        val (effectiveBot, effectiveMessages) = prepareContextAndSummarizeIfNeeded(bot, messages, selectedModel)
+        val systemPrompt = buildSystemPrompt(effectiveBot, settings)
 
         var primaryException: Exception? = null
         // Primary Execution
         try {
-            val result = executeModelRequest(selectedModel, settings, systemPrompt, messages)
-            recordTokenUsage(result.second.first, result.second.second)
+            val result = executeModelRequest(selectedModel, settings, systemPrompt, effectiveMessages, botId = effectiveBot.id)
+            recordTokenUsage(effectiveBot.id, result.second.first, result.second.second)
             return@withContext result.first
         } catch (e: Exception) {
             if (!settings.enableAutoFallback) {
@@ -602,8 +773,8 @@ Durdu, ifadesi ciddileşti.
         var fallbackErr: Exception? = null
         for (k in candidateKeys) {
             try {
-                val result = callGeminiApi(k, fallbackModel, systemPrompt, messages)
-                recordTokenUsage(result.second.first, result.second.second)
+                val result = callGeminiApi(k, fallbackModel, systemPrompt, effectiveMessages)
+                recordTokenUsage(effectiveBot.id, result.second.first, result.second.second)
                 return@withContext result.first
             } catch (err: Exception) {
                 fallbackErr = err
@@ -616,7 +787,8 @@ Durdu, ifadesi ciddileşti.
         model: String,
         settings: UserSettingsEntity,
         systemPrompt: String,
-        messages: List<MessageEntity>
+        messages: List<MessageEntity>,
+        botId: String? = null
     ): Pair<String, Pair<Long, Long>> {
         return when {
             // Groq Models
@@ -678,8 +850,8 @@ Durdu, ifadesi ciddileşti.
 
         val requestMsgs = listOf(MessageEntity(id = "init", botId = bot.id, role = "user", text = "Sahneyi/mesajı başlat.", timestamp = 0L))
 
-        val result = executeModelRequest(sanitizeModelName(settings.selectedModel.ifBlank { "gemini-2.5-flash" }), settings, systemPrompt, requestMsgs)
-        recordTokenUsage(result.second.first, result.second.second)
+        val result = executeModelRequest(sanitizeModelName(settings.selectedModel.ifBlank { "gemini-2.5-flash" }), settings, systemPrompt, requestMsgs, botId = bot.id)
+        recordTokenUsage(bot.id, result.second.first, result.second.second)
         return@withContext result.first
     }
 
@@ -703,7 +875,7 @@ Durdu, ifadesi ciddileşti.
         try {
             val requestMsgs = listOf(MessageEntity(id = "sum", botId = bot.id, role = "user", text = "$prompt\n\nSAHNE:\n$recapText", timestamp = 0L))
             val res = callGeminiApi(apiKey, "gemini-2.5-flash", "Sen yardımcı bir özetleyicisin.", requestMsgs)
-            recordTokenUsage(res.second.first, res.second.second)
+            recordTokenUsage(bot.id, res.second.first, res.second.second)
             val raw = res.first
 
             if (raw.contains("DURUM:", ignoreCase = true) || raw.contains("HAFIZA:", ignoreCase = true)) {

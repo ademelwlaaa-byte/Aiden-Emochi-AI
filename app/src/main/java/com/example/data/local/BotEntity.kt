@@ -27,6 +27,8 @@ data class BotEntity(
     val pinnedMemory: String = "",
     val storyNotes: String = "",
     val memoryNotes: String = "",
+    val totalPromptTokens: Long = 0L,
+    val totalCandidateTokens: Long = 0L,
     val updatedAt: Long = System.currentTimeMillis()
 )
 

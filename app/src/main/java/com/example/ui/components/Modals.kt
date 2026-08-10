@@ -1292,41 +1292,80 @@ fun BotSettingsModal(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Bot Privacy Toggle Card (Public / Private)
+                // Bot Privacy Toggle Card (Public / Private) - Templates cannot be public
+                if (!bot.isTemplate && !bot.id.startsWith("starter_") && !bot.id.startsWith("preset_")) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = EmochiCard),
+                        shape = RoundedCornerShape(14.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, EmochiBorder),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (isPublic) "🌐 Herkese Açık Bot" else "🔒 Sadece Kendine Özel",
+                                    color = EmochiTextPrimary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = if (isPublic) "Diğer kullanıcılar 'Keşfet' bölümünde botunuzu bulabilir." else "Bu bot gizlidir, sadece siz görebilirsiniz.",
+                                    color = EmochiTextMuted,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Switch(
+                                checked = isPublic,
+                                onCheckedChange = { isPublic = it },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color(0xFF1A1B2E),
+                                    checkedTrackColor = EmochiPrimary
+                                )
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                // Per-Bot Token Usage Stats Card
+                val botTotalTokens = bot.totalPromptTokens + bot.totalCandidateTokens
                 Card(
                     colors = CardDefaults.cardColors(containerColor = EmochiCard),
                     shape = RoundedCornerShape(14.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, EmochiBorder),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (isPublic) "🌐 Herkese Açık Bot" else "🔒 Sadece Kendine Özel",
-                                color = EmochiTextPrimary,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = if (isPublic) "Diğer kullanıcılar 'Keşfet' bölümünde botunuzu bulabilir." else "Bu bot gizlidir, sadece siz görebilirsiniz.",
-                                color = EmochiTextMuted,
-                                fontSize = 11.sp
-                            )
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Speed, contentDescription = null, tint = EmochiPrimary, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Bot Token Kullanım Sayacı", color = EmochiTextPrimary, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
                         }
-                        Switch(
-                            checked = isPublic,
-                            onCheckedChange = { isPublic = it },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color(0xFF1A1B2E),
-                                checkedTrackColor = EmochiPrimary
-                            )
-                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("Girdi Token", color = EmochiTextMuted, fontSize = 11.sp)
+                                Text("${bot.totalPromptTokens}", color = EmochiTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Column {
+                                Text("Çıktı Token", color = EmochiTextMuted, fontSize = 11.sp)
+                                Text("${bot.totalCandidateTokens}", color = EmochiTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Column {
+                                Text("Toplam Token", color = EmochiTextMuted, fontSize = 11.sp)
+                                Text("$botTotalTokens", color = EmochiPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
 
