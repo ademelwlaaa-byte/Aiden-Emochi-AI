@@ -36,7 +36,10 @@ data class BackupSnapshot(
     val settings: UserSettingsEntity
 )
 
-class EmochiRepository(private val db: AppDatabase) {
+class EmochiRepository(
+    private val db: AppDatabase,
+    private val context: android.content.Context? = null
+) {
     private val botDao = db.botDao()
     private val messageDao = db.messageDao()
     private val settingsDao = db.userSettingsDao()
@@ -63,26 +66,99 @@ class EmochiRepository(private val db: AppDatabase) {
 
     suspend fun getBot(id: String): BotEntity? = botDao.getBotById(id)
 
-    suspend fun saveBot(bot: BotEntity) = botDao.insertOrUpdate(bot)
+    suspend fun saveBot(bot: BotEntity) {
+        botDao.insertOrUpdate(bot)
+        autoBackupToStorage()
+    }
 
-    suspend fun deleteBot(id: String) = botDao.deleteBotById(id)
+    suspend fun deleteBot(id: String) {
+        botDao.deleteBotById(id)
+        autoBackupToStorage()
+    }
 
-    suspend fun saveMessage(msg: MessageEntity) = messageDao.insertMessage(msg)
+    suspend fun saveMessage(msg: MessageEntity) {
+        messageDao.insertMessage(msg)
+        autoBackupToStorage()
+    }
 
-    suspend fun deleteMessage(id: String) = messageDao.deleteMessageById(id)
+    suspend fun deleteMessage(id: String) {
+        messageDao.deleteMessageById(id)
+        autoBackupToStorage()
+    }
 
     suspend fun resetMessagesForBot(botId: String) {
         messageDao.deleteMessagesForBot(botId)
+        autoBackupToStorage()
     }
 
-    suspend fun updateUserSettings(settings: UserSettingsEntity) = settingsDao.insertOrUpdate(settings)
+    suspend fun updateUserSettings(settings: UserSettingsEntity) {
+        settingsDao.insertOrUpdate(settings)
+        autoBackupToStorage()
+    }
+
+    suspend fun autoBackupToStorage() = withContext(Dispatchers.IO) {
+        if (context == null) return@withContext
+        try {
+            val snapshot = BackupSnapshot(
+                version = 1,
+                bots = botDao.getAllBotsList(),
+                messages = messageDao.getAllMessagesList(),
+                settings = settingsDao.getUserSettings() ?: UserSettingsEntity()
+            )
+            val json = backupAdapter.toJson(snapshot)
+            val file1 = java.io.File(context.filesDir, "emochi_autobackup.json")
+            file1.writeText(json)
+            context.getExternalFilesDir(null)?.let { extDir ->
+                val file2 = java.io.File(extDir, "emochi_autobackup.json")
+                file2.writeText(json)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    suspend fun autoRestoreFromStorage(): Boolean = withContext(Dispatchers.IO) {
+        if (context == null) return@withContext false
+        try {
+            var backupFile = java.io.File(context.filesDir, "emochi_autobackup.json")
+            if (!backupFile.exists()) {
+                val extDir = context.getExternalFilesDir(null)
+                if (extDir != null) {
+                    backupFile = java.io.File(extDir, "emochi_autobackup.json")
+                }
+            }
+            if (backupFile.exists() && backupFile.length() > 0) {
+                val json = backupFile.readText()
+                val snapshot = backupAdapter.fromJson(json)
+                if (snapshot != null && snapshot.bots.isNotEmpty()) {
+                    for (bot in snapshot.bots) {
+                        botDao.insertOrUpdate(bot)
+                    }
+                    for (msg in snapshot.messages) {
+                        messageDao.insertMessage(msg)
+                    }
+                    settingsDao.insertOrUpdate(snapshot.settings)
+                    return@withContext true
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return@withContext false
+    }
 
     suspend fun getMessageListForBot(botId: String): List<MessageEntity> {
         return messageDao.getMessagesForBotList(botId)
     }
 
     suspend fun initStarterBotsIfEmpty() = withContext(Dispatchers.IO) {
-        val existingBots = botDao.getAllBotsList()
+        var existingBots = botDao.getAllBotsList()
+        if (existingBots.isEmpty()) {
+            val restored = autoRestoreFromStorage()
+            if (restored) {
+                existingBots = botDao.getAllBotsList()
+            }
+        }
         if (existingBots.isEmpty()) {
             val now = System.currentTimeMillis()
             val starterBot1 = BotEntity(

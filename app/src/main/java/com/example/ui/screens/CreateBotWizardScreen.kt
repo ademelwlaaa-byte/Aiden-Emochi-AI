@@ -108,10 +108,17 @@ fun CreateBotWizardScreen(
     var genError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     val photoPickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
     ) { uri: android.net.Uri? ->
-        uri?.let { avatarUrl = it.toString() }
+        uri?.let { inputUri ->
+            scope.launch {
+                val savedUrl = com.example.util.ImageStorageManager.compressAndSaveImage(context, inputUri)
+                avatarUrl = savedUrl
+            }
+        }
     }
 
     val totalSteps = 5

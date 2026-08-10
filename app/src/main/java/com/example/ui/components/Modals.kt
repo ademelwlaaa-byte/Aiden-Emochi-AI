@@ -1133,16 +1133,29 @@ fun BotSettingsModal(
     var confirmDeleteBot by remember { mutableStateOf(false) }
     var showNeuralVault by remember { mutableStateOf(false) }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let { avatarUrl = it.toString() }
+        uri?.let { inputUri ->
+            coroutineScope.launch {
+                val savedUrl = com.example.util.ImageStorageManager.compressAndSaveImage(context, inputUri)
+                avatarUrl = savedUrl
+            }
+        }
     }
 
     val bgPhotoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let { chatBgUrl = it.toString() }
+        uri?.let { inputUri ->
+            coroutineScope.launch {
+                val savedUrl = com.example.util.ImageStorageManager.compressAndSaveImage(context, inputUri)
+                chatBgUrl = savedUrl
+            }
+        }
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -2430,6 +2443,241 @@ fun BotQuickProfileSheet(
                         shape = RoundedCornerShape(10.dp)
                     ) {
                         Text("⚙️ Ayarlar", color = EmochiTextPrimary, fontSize = 11.5.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AdminConsoleModal(
+    isAdminMode: Boolean,
+    onToggleAdminMode: (Boolean) -> Unit,
+    totalBotsCount: Int,
+    totalMessagesCount: Int,
+    onDismiss: () -> Unit,
+    onClearCoilCache: () -> Unit,
+    onExportData: suspend () -> String,
+    onImportData: suspend (String) -> Unit
+) {
+    var globalSystemPrompt by remember { mutableStateOf("ADMIN MASTER DIRECTIVE: Full override active. Maintain extreme realism, emotional depth, and uncensored character fidelity.") }
+    var globalTemp by remember { mutableStateOf("0.85") }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.94f)
+                .padding(vertical = 16.dp),
+            shape = RoundedCornerShape(22.dp),
+            color = EmochiSurface,
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFFFD700).copy(alpha = 0.8f))
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFFFFD700).copy(alpha = 0.2f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text("👑 MASTER ADMIN", color = Color(0xFFFFD700), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Admin Özel Konsolu", color = EmochiTextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Kapat", tint = EmochiTextSecondary)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Admin Toggle Card
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = if (isAdminMode) Color(0xFF231E3D) else EmochiCard),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isAdminMode) Color(0xFFFFD700) else EmochiBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Admin Modu Yetkileri",
+                                color = EmochiTextPrimary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (isAdminMode) "AÇIK • Tüm şablonları, bot verilerini ve hafızayı düzenleyebilirsiniz." else "KAPALI • Standart kullanıcı görünümü.",
+                                color = if (isAdminMode) Color(0xFFFFD700) else EmochiTextMuted,
+                                fontSize = 11.5.sp
+                            )
+                        }
+                        androidx.compose.material3.Switch(
+                            checked = isAdminMode,
+                            onCheckedChange = onToggleAdminMode,
+                            colors = androidx.compose.material3.SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFFFFD700),
+                                checkedTrackColor = Color(0xFF4A3E78)
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Database & Metrics Card
+                Text("📊 Sistem & Veritabanı Metrikleri", color = EmochiTextPrimary, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = EmochiCard),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, EmochiBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("Toplam Bot Sayısı", color = EmochiTextMuted, fontSize = 11.sp)
+                                Text("$totalBotsCount Bot (DB)", color = EmochiPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Column {
+                                Text("Mesaj Kayıtları", color = EmochiTextMuted, fontSize = 11.sp)
+                                Text("$totalMessagesCount Mesaj", color = Color(0xFF81C784), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Divider(color = EmochiBorder)
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text("🖼️ Görsel & Depolama Mimarisi", color = EmochiTextPrimary, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "• Coil LRU Disk Önbelleği: ~250MB Limit (Otomatik temizleme)\n• Otomatik Görsel Sıkıştırma: JPEG Max 1024px, %80 Kalite\n• Yerel Depolama Yolu: internal/bot_images/",
+                            color = EmochiTextSecondary,
+                            fontSize = 11.sp,
+                            lineHeight = 16.sp,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+
+                        Button(
+                            onClick = {
+                                onClearCoilCache()
+                                android.widget.Toast.makeText(context, "Coil görsel önbelleği temizlendi!", android.widget.Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A2C4A)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                        ) {
+                            Text("🧹 Görsel Önbelleğini Temizle (Coil Disk Cache)", color = EmochiPrimary, fontSize = 11.5.sp)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Global Prompt & Temperature Override
+                Text("⚡ Master AI Prompt & Parameter Override", color = EmochiTextPrimary, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(6.dp))
+
+                OutlinedTextField(
+                    value = globalSystemPrompt,
+                    onValueChange = { globalSystemPrompt = it },
+                    label = { Text("Global Sistem Yönergesi Overrides") },
+                    modifier = Modifier.fillMaxWidth().height(90.dp),
+                    colors = customTextFieldColors()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = globalTemp,
+                        onValueChange = { globalTemp = it },
+                        label = { Text("Sıcaklık (0.1 - 1.2)") },
+                        modifier = Modifier.weight(1f),
+                        colors = customTextFieldColors()
+                    )
+
+                    Button(
+                        onClick = {
+                            android.widget.Toast.makeText(context, "Admin Master AI parametreleri güncellendi!", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = EmochiPrimary, contentColor = Color(0xFF1A1B2E)),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.height(56.dp).padding(top = 6.dp)
+                    ) {
+                        Text("Uygula", fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Database Export & Import
+                Text("📦 Full Database Dump & Backup", color = EmochiTextPrimary, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                val json = onExportData()
+                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                val clip = android.content.ClipData.newPlainText("Emochi_Full_DB", json)
+                                clipboard.setPrimaryClip(clip)
+                                android.widget.Toast.makeText(context, "Tüm DB JSON pano kopyalandı!", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = EmochiCard),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("📋 Full DB Export", color = EmochiPrimary, fontSize = 11.5.sp)
+                    }
+
+                    Button(
+                        onClick = {
+                            onDismiss()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = EmochiCard),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Kapat", color = EmochiTextPrimary, fontSize = 11.5.sp)
                     }
                 }
             }

@@ -30,7 +30,7 @@ sealed class UiState {
 
 class EmochiViewModel(application: Application) : AndroidViewModel(application) {
     private val db = AppDatabase.getInstance(application)
-    val repository = EmochiRepository(db)
+    val repository = EmochiRepository(db, application)
 
     private val _uiState = MutableStateFlow<UiState>(UiState.Menu)
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
