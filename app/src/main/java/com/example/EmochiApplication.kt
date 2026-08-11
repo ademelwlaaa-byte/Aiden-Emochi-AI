@@ -9,6 +9,15 @@ import coil.request.CachePolicy
 
 class EmochiApplication : Application(), ImageLoaderFactory {
 
+    override fun onCreate() {
+        super.onCreate()
+        try {
+            com.example.work.SummarizationWorker.schedule(this)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             .memoryCache {

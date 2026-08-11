@@ -196,30 +196,7 @@ fun BotListScreen(
                         )
                     }
 
-                    // 3. Kitaplar
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { activeTab = "books" }
-                            .padding(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MenuBook,
-                            contentDescription = "Kitaplar",
-                            tint = if (activeTab == "books") EmochiPrimary else EmochiTextMuted,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Text(
-                            text = "Kitaplar",
-                            color = if (activeTab == "books") EmochiPrimary else EmochiTextMuted,
-                            fontSize = 10.sp,
-                            fontWeight = if (activeTab == "books") FontWeight.Bold else FontWeight.Normal,
-                            modifier = Modifier.padding(top = 2.dp)
-                        )
-                    }
-
-                    // 4. Center (+) Yellow Button
+                    // 3. Center (+) Yellow Button
                     IconButton(
                         onClick = onNewBot,
                         modifier = Modifier
@@ -259,22 +236,27 @@ fun BotListScreen(
                         )
                     }
 
-                    // 5. Ayarlar
+                    // 5. Kitaplar
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
-                            .clickable { showGlobalSettings = true }
+                            .clickable { activeTab = "books" }
                             .padding(6.dp)
-                            .testTag("global_settings_button")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Ayarlar",
-                            tint = EmochiTextMuted,
+                            imageVector = Icons.Default.MenuBook,
+                            contentDescription = "Kitaplar",
+                            tint = if (activeTab == "books") EmochiPrimary else EmochiTextMuted,
                             modifier = Modifier.size(22.dp)
                         )
-                        Text("Ayarlar", color = EmochiTextMuted, fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp))
+                        Text(
+                            text = "Kitaplar",
+                            color = if (activeTab == "books") EmochiPrimary else EmochiTextMuted,
+                            fontSize = 10.sp,
+                            fontWeight = if (activeTab == "books") FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
                     }
                 }
             }
@@ -349,8 +331,11 @@ fun BotListScreen(
                         )
                     }
                     "discover" -> {
+                        val publicBots = remember(botList) {
+                            botList.filter { it.isPublic }
+                        }
                         DiscoverTabContent(
-                            botList = botList.filter { it.isPublic }, // ONLY PUBLIC BOTS IN DISCOVER
+                            botList = publicBots,
                             searchQuery = searchQuery,
                             onSearchQueryChange = { searchQuery = it },
                             onOpenBot = onOpenBot
@@ -669,7 +654,7 @@ fun DiscoverTabContent(
                         confirmDeleteId = null,
                         onConfirmDeleteChange = {},
                         onOpenBot = onOpenBot,
-                        onDeleteBot = {},
+                        onDeleteBot = null,
                         onTogglePrivacy = null
                     )
                 }
@@ -684,8 +669,8 @@ fun BotCardItem(
     confirmDeleteId: String?,
     onConfirmDeleteChange: (String?) -> Unit,
     onOpenBot: (String) -> Unit,
-    onDeleteBot: (String) -> Unit,
-    onTogglePrivacy: ((BotEntity) -> Unit)?
+    onDeleteBot: ((String) -> Unit)? = null,
+    onTogglePrivacy: ((BotEntity) -> Unit)? = null
 ) {
     val isUniverse = bot.mode == "universe"
     val displayName = if (isUniverse) bot.universeName.ifBlank { "Evren" } else bot.aiName.ifBlank { "Karakter" }
@@ -823,47 +808,88 @@ fun BotCardItem(
                         }
                     }
 
-                    if (confirmDeleteId == bot.id) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            TextButton(
-                                onClick = { onConfirmDeleteChange(null) },
-                                modifier = Modifier.height(32.dp)
+                    if (onDeleteBot != null) {
+                        if (confirmDeleteId == bot.id) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
-                                Text("Vazgeç", color = EmochiTextMuted, fontSize = 10.5.sp)
+                                TextButton(
+                                    onClick = { onConfirmDeleteChange(null) },
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Text("Vazgeç", color = EmochiTextMuted, fontSize = 10.5.sp)
+                                }
+                                Button(
+                                    onClick = {
+                                        onConfirmDeleteChange(null)
+                                        onDeleteBot(bot.id)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = EmochiError),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                    modifier = Modifier.height(30.dp)
+                                ) {
+                                    Text("Sil", color = Color.White, fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
-                            Button(
-                                onClick = {
-                                    onConfirmDeleteChange(null)
-                                    onDeleteBot(bot.id)
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = EmochiError),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                                modifier = Modifier.height(30.dp)
+                        } else {
+                            IconButton(
+                                onClick = { onConfirmDeleteChange(bot.id) },
+                                modifier = Modifier.size(32.dp)
                             ) {
-                                Text("Sil", color = Color.White, fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Sil",
+                                    tint = EmochiTextMuted,
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
-                        }
-                    } else if (onDeleteBot != {}) {
-                        IconButton(
-                            onClick = { onConfirmDeleteChange(bot.id) },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = "Sil",
-                                tint = EmochiTextMuted,
-                                modifier = Modifier.size(18.dp)
-                            )
                         }
                     }
                 }
             }
         }
     }
+}
+
+fun getAppPresets(isEnglish: Boolean): List<BotEntity> {
+    return listOf(
+        BotEntity(
+            id = "preset_aria",
+            mode = "personal",
+            aiName = if (isEnglish) "Aria (Cyber Sec Specialist)" else "Aria (Siber Güvenlik Uzmanı)",
+            aiPersonality = if (isEnglish) "Intelligent, direct-spoken, mysterious, witty, and deeply loyal." else "Zeki, doğrudan konuşan, gizemli, alaycı ama içten içe sadık.",
+            scenario = if (isEnglish) "An independent cybersecurity hacker and investigator working in Neo-Siberia." else "Neo-Siberia şehrinde çalışan bağımsız bir siber güvenlik korsanı ve araştırmacı.",
+            universeName = "",
+            keyCharactersJson = "[]",
+            userCharName = if (isEnglish) "Detective" else "Dedektif",
+            userCharDesc = if (isEnglish) "Experienced digital forensics expert from Merge City." else "Merge Şehrinden gelen tecrübeli adli bilişim uzmanı.",
+            openingMessage = if (isEnglish) "*Aria looks up from her terminal screen and narrows her eyes at you.* Finally you arrived. Clearing the digital traces you left on the servers took hours..." else "*Aria terminal ekranından başını kaldırır ve gözlerini kısarak sana bakar.* Nihayet geldin. Sunucularda bıraktığın dijital izleri temizlemem saatlerimi aldı...",
+            writingStyle = "rp",
+            intensity = "normal",
+            isPublic = false,
+            isTemplate = true,
+            pinnedMemory = if (isEnglish) "MISSION ::: CYBER ::: Investigating data breach in Merge City." else "GÖREV ::: SİBER ::: Merge şehrindeki veri sızıntısını araştırıyoruz."
+        ),
+        BotEntity(
+            id = "preset_eldoria",
+            mode = "universe",
+            aiName = if (isEnglish) "Kingdom of Eldoria" else "Eldoria Krallığı",
+            aiPersonality = if (isEnglish) "Eldoria Realm Narrator." else "Eldoria anlatıcısı.",
+            scenario = if (isEnglish) "A feudal fantasy world on the brink of war. Dragons, kingdoms, and rogue guilds." else "Savaşın eşiğindeki feodal bir fantezi dünyası. Ejderhalar, krallıklar ve loncalar.",
+            universeName = if (isEnglish) "Kingdom of Eldoria" else "Eldoria Krallığı",
+            keyCharactersJson = "[]",
+            userCharName = if (isEnglish) "Warrior" else "Savaşçı",
+            userCharDesc = if (isEnglish) "A wandering guild mercenary." else "Gezgin bir lonca paralı askeri.",
+            openingMessage = if (isEnglish) "Night settles over Mist Valley at the eastern border of Eldoria. As the tavern door creaks open, a cold wind sweeps in..." else "Eldoria Krallığı'nın doğu sınırındaki Sisli Vadi'de gece çöküyor. Hanın kapısı gıcırdayarak açıldığında içeri soğuk bir rüzgar giriyor...",
+            writingStyle = "rp",
+            intensity = "normal",
+            isPublic = false,
+            isTemplate = true,
+            pinnedMemory = if (isEnglish) "UNIVERSE ::: ELDORIA ::: Tensions rise between royal guards and rebel guilds." else "EVREN ::: ELDORİA ::: Kraliyet muhafızları ve asi loncaları arasında gerilim tırmanıyor."
+        )
+    )
 }
 
 @Composable
@@ -875,44 +901,7 @@ fun ExploreTabContent(
     val isEnglish = userSettings?.appLanguage == "en"
     var selectedCategory by remember { mutableStateOf("all") } // "all", "universe", "personal"
 
-    val presets = remember(isEnglish) {
-        listOf(
-            BotEntity(
-                id = "preset_aria",
-                mode = "personal",
-                aiName = if (isEnglish) "Aria (Cyber Sec Specialist)" else "Aria (Siber Güvenlik Uzmanı)",
-                aiPersonality = if (isEnglish) "Intelligent, direct-spoken, mysterious, witty, and deeply loyal." else "Zeki, doğrudan konuşan, gizemli, alaycı ama içten içe sadık.",
-                scenario = if (isEnglish) "An independent cybersecurity hacker and investigator working in Neo-Siberia." else "Neo-Siberia şehrinde çalışan bağımsız bir siber güvenlik korsanı ve araştırmacı.",
-                universeName = "",
-                keyCharactersJson = "[]",
-                userCharName = if (isEnglish) "Detective" else "Dedektif",
-                userCharDesc = if (isEnglish) "Experienced digital forensics expert from Merge City." else "Merge Şehrinden gelen tecrübeli adli bilişim uzmanı.",
-                openingMessage = if (isEnglish) "*Aria looks up from her terminal screen and narrows her eyes at you.* Finally you arrived. Clearing the digital traces you left on the servers took hours..." else "*Aria terminal ekranından başını kaldırır ve gözlerini kısarak sana bakar.* Nihayet geldin. Sunucularda bıraktığın dijital izleri temizlemem saatlerimi aldı...",
-                writingStyle = "rp",
-                intensity = "normal",
-                isPublic = false,
-                isTemplate = true,
-                pinnedMemory = if (isEnglish) "MISSION ::: CYBER ::: Investigating data breach in Merge City." else "GÖREV ::: SİBER ::: Merge şehrindeki veri sızıntısını araştırıyoruz."
-            ),
-            BotEntity(
-                id = "preset_eldoria",
-                mode = "universe",
-                aiName = if (isEnglish) "Kingdom of Eldoria" else "Eldoria Krallığı",
-                aiPersonality = if (isEnglish) "Eldoria Realm Narrator." else "Eldoria anlatıcısı.",
-                scenario = if (isEnglish) "A feudal fantasy world on the brink of war. Dragons, kingdoms, and rogue guilds." else "Savaşın eşiğindeki feodal bir fantezi dünyası. Ejderhalar, krallıklar ve loncalar.",
-                universeName = if (isEnglish) "Kingdom of Eldoria" else "Eldoria Krallığı",
-                keyCharactersJson = "[]",
-                userCharName = if (isEnglish) "Warrior" else "Savaşçı",
-                userCharDesc = if (isEnglish) "A wandering guild mercenary." else "Gezgin bir lonca paralı askeri.",
-                openingMessage = if (isEnglish) "Night settles over Mist Valley at the eastern border of Eldoria. As the tavern door creaks open, a cold wind sweeps in..." else "Eldoria Krallığı'nın doğu sınırındaki Sisli Vadi'de gece çöküyor. Hanın kapısı gıcırdayarak açıldığında içeri soğuk bir rüzgar giriyor...",
-                writingStyle = "rp",
-                intensity = "normal",
-                isPublic = false,
-                isTemplate = true,
-                pinnedMemory = if (isEnglish) "UNIVERSE ::: ELDORIA ::: Tensions rise between royal guards and rebel guilds." else "EVREN ::: ELDORİA ::: Kraliyet muhafızları ve asi loncaları arasında gerilim tırmanıyor."
-            )
-        )
-    }
+    val presets = remember(isEnglish) { getAppPresets(isEnglish) }
 
     val filteredPresets = remember(selectedCategory, presets) {
         when (selectedCategory) {
@@ -1105,22 +1094,13 @@ fun ExploreTabContent(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AidenStoriesModal(
-    userSettings: UserSettingsEntity?,
-    onDismiss: () -> Unit,
-    onImportPresetBot: ((BotEntity) -> Unit)?
-) {
-    val isEnglish = userSettings?.appLanguage == "en"
-
-    val aidenPresets = remember(isEnglish) {
-        if (isEnglish) {
-            listOf(
-                BotEntity(
-                    id = "preset_aiden_zoktay",
-                    mode = "universe",
-                    aiName = "Aiden Blackwood & Zoktay",
+fun getAidenPresetsList(isEnglish: Boolean): List<BotEntity> {
+    return if (isEnglish) {
+        listOf(
+            BotEntity(
+                id = "preset_aiden_zoktay",
+                mode = "universe",
+                aiName = "Aiden Blackwood & Zoktay",
                     aiPersonality = """I am Aiden Blackwood.
 Confident, disciplined, and highly self-aware, I learned early to control my emotions under constant pressure and public attention. I rarely expose my inner world, hiding vulnerabilities behind composure and quiet charm.
 On the pitch, I am aggressive, fearless, and dominant—thriving under pressure and psychologically overwhelming opponents while letting my performance speak for itself.
@@ -1560,6 +1540,16 @@ Aiden başını hafifçe ona doğru çevirdi, obsidyen-gümüş bakışları Syd
         }
     }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AidenStoriesModal(
+    userSettings: UserSettingsEntity?,
+    onDismiss: () -> Unit,
+    onImportPresetBot: ((BotEntity) -> Unit)?
+) {
+    val isEnglish = userSettings?.appLanguage == "en"
+    val aidenPresets = remember(isEnglish) { getAidenPresetsList(isEnglish) }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -1642,9 +1632,9 @@ Aiden başını hafifçe ona doğru çevirdi, obsidyen-gümüş bakışları Syd
                                 Spacer(modifier = Modifier.height(8.dp))
                                  Text(
                                     text = if (isEnglish)
-                                        "• Galatasaray #9 Center-Forward (€210M) & ManiHouse (Zoktay)\n• SDN Dispatch Universe: Powers, Clones & Avatar (Blonde Blazer)\n• Viren City Restaurant & The Joker Dual Identity (Emma Myers)\n• NewYork-Presbyterian Hospital: Miracle Doctor & Erasure Syndrome (Jenna Ortega)\n• Monaco Apex Formula 1: Chronos Perception & Phantom Driver (Hailee Steinfeld)"
+                                        "• Galatasaray #9 Center-Forward (€210M) & ManiHouse (Zoktay)\n• SDN Dispatch Universe: Powers, Clones & Avatar (Blonde Blazer)\n• Viren City Restaurant & The Joker Dual Identity (Emma Myers)\n• NewYork-Presbyterian Hospital: Miracle Doctor & Erasure Syndrome (Jenna Ortega)\n• Tokyo & Zurich Obsidian Protocol: Aero-Kinetic Synesthesia & Shadow Archival (Sydney Sweeney)"
                                     else
-                                        "• Galatasaray #9 Santrafor (€210M) & ManiHouse (Zoktay)\n• SDN Dispatch Evreni: Güçler, Klonlar ve Avatar (Blonde Blazer)\n• Viren Şehri Restoranı & The Joker Çift Kişilik (Emma Myers)\n• NewYork-Presbyterian Hospital: Mucize Doktor & Erasure Sendromu (Jenna Ortega)\n• Monaco Apex Formula 1: Chronos Görüşü & Hayalet Sürücü (Hailee Steinfeld)",
+                                        "• Galatasaray #9 Santrafor (€210M) & ManiHouse (Zoktay)\n• SDN Dispatch Evreni: Güçler, Klonlar ve Avatar (Blonde Blazer)\n• Viren Şehri Restoranı & The Joker Çift Kişilik (Emma Myers)\n• NewYork-Presbyterian Hospital: Mucize Doktor & Erasure Sendromu (Jenna Ortega)\n• Tokyo & Zürih Obsidian Protokolü: Aero-Kinetik Senestezi & Gölge Arşivi (Sydney Sweeney)",
                                     color = Color(0xFF94A3B8),
                                     fontSize = 12.sp,
                                     lineHeight = 18.sp

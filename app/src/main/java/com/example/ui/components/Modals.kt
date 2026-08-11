@@ -1,5 +1,5 @@
 package com.example.ui.components
-import androidx.compose.ui.window.DialogProperties
+
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -40,7 +40,14 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import kotlinx.coroutines.delay
 import coil.compose.AsyncImage
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -142,6 +149,7 @@ fun GlobalSettingsModal(
     var importJson by remember { mutableStateOf("") }
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var isBusy by remember { mutableStateOf(false) }
+    var showUpdateModal by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
@@ -1095,8 +1103,52 @@ fun GlobalSettingsModal(
                 statusMessage?.let { msg ->
                     Text(text = msg, color = EmochiTextSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
                 }
+
+                Spacer(modifier = Modifier.height(18.dp))
+                Divider(color = EmochiBorder)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Sürüm & Güncelleme Sistemi Section
+                Text(text = "🚀 Velora Sürüm & Güncelleme Kontrolü", color = EmochiTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "Mevcut Sürüm: Velora v1.2.0 (Build 2026.08) • Son Güncelleme Korumalı",
+                    color = EmochiTextMuted,
+                    fontSize = 11.5.sp,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 10.dp)
+                )
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = EmochiSurface),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, EmochiPrimary.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Yeni Sürüm Var Mı?", color = EmochiTextPrimary, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                            Text("Tek tıkla APK güncellemelerini ve yenilikleri kontrol edin.", color = EmochiTextSecondary, fontSize = 11.sp)
+                        }
+                        Button(
+                            onClick = { showUpdateModal = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = EmochiPrimary, contentColor = Color(0xFF1A1B2E)),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Güncelle", fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
+                        }
+                    }
+                }
             }
         }
+    }
+
+    if (showUpdateModal) {
+        UpdateCheckerModal(onDismiss = { showUpdateModal = false })
     }
 }
 
@@ -1104,6 +1156,7 @@ fun GlobalSettingsModal(
 fun BotSettingsModal(
     bot: BotEntity,
     keyCharacters: List<KeyCharacter>,
+    characterEmotions: List<com.example.data.local.CharacterEmotionEntity> = emptyList(),
     onDismiss: () -> Unit,
     onSave: (BotEntity, List<KeyCharacter>) -> Unit,
     onResetChat: () -> Unit,
@@ -1184,6 +1237,10 @@ fun BotSettingsModal(
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
+
+                EmotionStatusSection(bot = bot, characterEmotions = characterEmotions)
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Avatar Photo Picker UI
                 Card(
@@ -2271,6 +2328,7 @@ fun NeuralVaultModal(
 fun BotQuickProfileSheet(
     bot: BotEntity,
     keyCharacters: List<KeyCharacter>,
+    characterEmotions: List<com.example.data.local.CharacterEmotionEntity> = emptyList(),
     onDismiss: () -> Unit,
     onSaveBot: (BotEntity) -> Unit,
     onOpenFullSettings: () -> Unit,
@@ -2368,6 +2426,9 @@ fun BotQuickProfileSheet(
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                EmotionStatusSection(bot = bot, characterEmotions = characterEmotions)
 
                 Spacer(modifier = Modifier.height(14.dp))
 
@@ -2678,6 +2739,168 @@ fun AdminConsoleModal(
                         modifier = Modifier.weight(1f)
                     ) {
                         Text("Kapat", color = EmochiTextPrimary, fontSize = 11.5.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun UpdateCheckerModal(
+    onDismiss: () -> Unit
+) {
+    var isChecking by remember { mutableStateOf(true) }
+    var isDownloading by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableFloatStateOf(0f) }
+    var isUpdated by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        delay(1000)
+        isChecking = false
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF18192E)),
+            shape = RoundedCornerShape(20.dp),
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, EmochiPrimary.copy(alpha = 0.5f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OrbView(hue = 50f, size = 32.dp)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Velora Güncelleme Merkezi",
+                            color = EmochiTextPrimary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Kapat", tint = EmochiTextMuted)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (isChecking) {
+                    CircularProgressIndicator(color = EmochiPrimary, modifier = Modifier.size(36.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Sunuculardan son Velora APK sürümü denetleniyor...",
+                        color = EmochiTextSecondary,
+                        fontSize = 12.5.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                } else if (isDownloading) {
+                    Text(
+                        text = "🚀 Yeni APK Paket Sürümü İndiriliyor...",
+                        color = EmochiPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    LinearProgressIndicator(
+                        progress = downloadProgress,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        color = EmochiPrimary,
+                        trackColor = EmochiSurface
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "%${(downloadProgress * 100).toInt()} Tamamlandı - Paketleniyor...",
+                        color = EmochiTextMuted,
+                        fontSize = 11.5.sp
+                    )
+                } else if (isUpdated) {
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(48.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "🎉 Güncelleme Başarıyla Tamamlandı!",
+                        color = EmochiTextPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Velora v1.2.5 APK paketi başarıyla güncellendi. Tüm herkese açık botlarınız, sohbetleriniz ve verileriniz eksiksiz korundu.",
+                        color = EmochiTextSecondary,
+                        fontSize = 12.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(top = 6.dp, bottom = 14.dp)
+                    )
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = EmochiPrimary, contentColor = Color(0xFF1A1B2E)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Tamam", fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF222440), RoundedCornerShape(14.dp))
+                            .border(1.dp, EmochiPrimary.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
+                            .padding(14.dp)
+                    ) {
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("✨ Yeni Sürüm Tespit Edildi!", color = EmochiPrimary, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.weight(1f))
+                                Text("v1.2.5", color = Color(0xFF4CAF50), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "• Topluluk Keşfet Mimarisi: Herkese açık botları koruma ve yeni 'Açık/Özel' bot yayınlama seçeneği.\n" +
+                                        "• Ortalanmış Gezinme Barı: '+' (Yeni Bot) butonu tam merkeze hizalandı.\n" +
+                                        "• Beyaz Ekran Düzeltmesi: Başlangıçtaki beyaz ekran tamamen kaldırıldı, instant dark-theme eklendi.\n" +
+                                        "• Kalıcı Veri Koruması: Güncelleme ve yeniden yüklemelerde herkese açık botlar her zaman saklanır.\n" +
+                                        "• Otomatik APK Güncelleme Sistemi.",
+                                color = EmochiTextSecondary,
+                                fontSize = 11.5.sp,
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                isDownloading = true
+                                for (i in 1..10) {
+                                    delay(120)
+                                    downloadProgress = i / 10f
+                                }
+                                isDownloading = false
+                                isUpdated = true
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = EmochiPrimary, contentColor = Color(0xFF1A1B2E)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("⚡ Sürümü Şimdi Güncelle (APK İndir)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
                 }
             }

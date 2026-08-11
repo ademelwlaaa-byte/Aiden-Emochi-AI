@@ -39,6 +39,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -101,6 +103,7 @@ fun CreateBotWizardScreen(
     var openingMessage by remember { mutableStateOf("") }
     var writingStyle by remember { mutableStateOf("rp") }
     var intensity by remember { mutableStateOf("normal") }
+    var isPublic by remember { mutableStateOf(true) }
 
     var keyCharacters by remember { mutableStateOf<List<KeyCharacter>>(emptyList()) }
 
@@ -152,6 +155,7 @@ fun CreateBotWizardScreen(
             intensity = intensity,
             customLength = "default",
             isNsfw = true,
+            isPublic = isPublic,
             updatedAt = System.currentTimeMillis()
         )
     }
@@ -569,6 +573,29 @@ fun CreateBotWizardScreen(
                         icon = Icons.Default.AutoAwesome,
                         isSelected = intensity == "intense",
                         onClick = { intensity = "intense" }
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text("Görünürlük & Yayınlama", color = EmochiTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    ModeSelectionCard(
+                        title = "🌐 Herkese Açık (Keşfette Yayınla)",
+                        desc = "Botunuz Velora Keşfet sekmesinde tüm toplulukla paylaşılır.",
+                        icon = Icons.Default.Public,
+                        isSelected = isPublic,
+                        onClick = { isPublic = true }
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    ModeSelectionCard(
+                        title = "🔒 Sadece Bana Özel",
+                        desc = "Bot sadece sizin cihazınızda ve sohbetlerinizde gözükür.",
+                        icon = Icons.Default.Lock,
+                        isSelected = !isPublic,
+                        onClick = { isPublic = false }
                     )
                 }
             }

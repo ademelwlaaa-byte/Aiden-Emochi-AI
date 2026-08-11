@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.AppDatabase
 import com.example.data.local.BotEntity
+import com.example.data.local.CharacterEmotionEntity
 import com.example.data.local.MessageEntity
 import com.example.data.local.UserSettingsEntity
 import com.example.data.repository.EmochiRepository
@@ -67,6 +68,17 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
     val activeMessages: StateFlow<List<MessageEntity>> = _activeBotId
         .flatMapLatest { id ->
             if (id == null) flowOf(emptyList()) else repository.getMessagesFlow(id)
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = emptyList()
+        )
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val activeCharacterEmotions: StateFlow<List<CharacterEmotionEntity>> = _activeBotId
+        .flatMapLatest { id ->
+            if (id == null) flowOf(emptyList()) else repository.getCharacterEmotionsFlow(id)
         }
         .stateIn(
             scope = viewModelScope,
@@ -154,6 +166,7 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
         stopSpeaking()
         _errorMessage.value = null
         _activeBotId.value = null
+        EmochiRepository.activeBotId = null
         _uiState.value = UiState.Menu
     }
 
@@ -169,6 +182,7 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
         if (_activeBotId.value != botId) {
             _activeBotId.value = botId
         }
+        EmochiRepository.activeBotId = botId
         _uiState.value = UiState.Chat(botId)
 
         viewModelScope.launch {
@@ -242,6 +256,7 @@ class EmochiViewModel(application: Application) : AndroidViewModel(application) 
                 repository.saveMessage(openingMsg)
 
                 _activeBotId.value = bot.id
+                EmochiRepository.activeBotId = bot.id
                 _uiState.value = UiState.Chat(bot.id)
                 onComplete()
             } catch (e: Exception) {

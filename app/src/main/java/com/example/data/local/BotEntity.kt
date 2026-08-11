@@ -29,6 +29,10 @@ data class BotEntity(
     val memoryNotes: String = "",
     val totalPromptTokens: Long = 0L,
     val totalCandidateTokens: Long = 0L,
+    val needsSummarization: Boolean = false,
+    val emotionState: String = """{"mood":"nötr","intensity":5,"affection":50,"trust":50,"tension":10}""",
+    val previousEmotionState: String = """{"mood":"nötr","intensity":5,"affection":50,"trust":50,"tension":10}""",
+    val worldAtmosphere: String = """{"mood":"sakin","intensity":5,"currentEvent":""}""",
     val updatedAt: Long = System.currentTimeMillis()
 )
 

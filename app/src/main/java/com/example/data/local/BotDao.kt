@@ -19,6 +19,12 @@ interface BotDao {
     @Query("SELECT * FROM bots WHERE id = :id")
     fun getBotByIdFlow(id: String): Flow<BotEntity?>
 
+    @Query("SELECT * FROM bots WHERE needsSummarization = 1")
+    suspend fun getBotsNeedingSummarization(): List<BotEntity>
+
+    @Query("UPDATE bots SET needsSummarization = :needs WHERE id = :id")
+    suspend fun setNeedsSummarization(id: String, needs: Boolean)
+
     @Upsert
     suspend fun insertOrUpdate(bot: BotEntity)
 

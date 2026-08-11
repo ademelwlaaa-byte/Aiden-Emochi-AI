@@ -8,8 +8,12 @@ import com.example.data.api.GeminiRequest
 import com.example.data.api.RetrofitClient
 import com.example.data.local.AppDatabase
 import com.example.data.local.BotEntity
+import com.example.data.local.CharacterEmotionEntity
+import com.example.data.local.EmotionState
+import com.example.data.local.MemoryFragmentEntity
 import com.example.data.local.MessageEntity
 import com.example.data.local.UserSettingsEntity
+import com.example.data.local.WorldAtmosphere
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -40,9 +44,19 @@ class EmochiRepository(
     private val db: AppDatabase,
     private val context: android.content.Context? = null
 ) {
+    companion object {
+        @Volatile
+        var activeBotId: String? = null
+    }
+
     private val botDao = db.botDao()
     private val messageDao = db.messageDao()
     private val settingsDao = db.userSettingsDao()
+    private val fragmentDao = db.memoryFragmentDao()
+    private val emotionDao = db.characterEmotionDao()
+
+    fun getCharacterEmotionsFlow(botId: String) = emotionDao.getEmotionsForBotFlow(botId)
+    suspend fun getCharacterEmotions(botId: String) = emotionDao.getEmotionsForBot(botId)
 
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
     private val keyCharListAdapter = moshi.adapter<List<KeyCharacter>>(
@@ -176,7 +190,7 @@ class EmochiRepository(
                 intensity = "normal",
                 customLength = "default",
                 isNsfw = true,
-                isPublic = false,
+                isPublic = true,
                 isTemplate = true,
                 pinnedMemory = "Ayla her zaman içten ve samimidir. Sencer'e çok değer verir.",
                 updatedAt = now
@@ -197,7 +211,7 @@ class EmochiRepository(
                 intensity = "normal",
                 customLength = "default",
                 isNsfw = true,
-                isPublic = false,
+                isPublic = true,
                 isTemplate = true,
                 pinnedMemory = "Aetheria evreninde yüksek teknoloji ile kadim sihir iç içedir.",
                 updatedAt = now - 1000
@@ -222,14 +236,7 @@ class EmochiRepository(
             )
             messageDao.insertMessage(msg1)
             messageDao.insertMessage(msg2)
-        } else {
-            for (bot in existingBots) {
-                if (bot.id.startsWith("starter_") || bot.id.startsWith("preset_") || bot.isTemplate) {
-                    if (bot.isPublic || !bot.isTemplate) {
-                        botDao.insertOrUpdate(bot.copy(isPublic = false, isTemplate = true))
-                    }
-                }
-            }
+            autoBackupToStorage()
         }
     }
 
@@ -278,20 +285,179 @@ class EmochiRepository(
         }
     }
 
+    // --- RAG (Semantic & Keyword Search Memory Fragments) ---
+
+    private val stopWords = setOf(
+        "ve", "bir", "de", "da", "bu", "şu", "ile", "için", "en", "çok", "ama", "fakat", "gibi",
+        "ben", "sen", "o", "biz", "siz", "onlar", "mi", "mı", "mu", "mü", "daha", "kadar", "her",
+        "zaman", "sonra", "önce", "var", "yok", "ki", "ne", "nasıl", "neden", "niye", "şey", "yani",
+        "the", "a", "an", "is", "are", "and", "or", "to", "in", "of", "for", "with", "on", "at", "by", "from"
+    )
+
+    fun extractKeywords(text: String): List<String> {
+        if (text.isBlank()) return emptyList()
+        val clean = text.lowercase()
+            .replace(Regex("[^a-zçğıöşü0-9\\s]"), " ")
+        return clean.split(Regex("\\s+"))
+            .filter { it.length >= 3 && !stopWords.contains(it) }
+            .distinct()
+    }
+
+    private suspend fun saveMemoryFragmentsFromSummary(botId: String, durumText: String, hafizaText: String) {
+        val fragments = mutableListOf<MemoryFragmentEntity>()
+        val now = System.currentTimeMillis()
+
+        durumText.lines().map { it.trim() }.filter { it.isNotBlank() }.forEach { line ->
+            val cleanLine = line.removePrefix("-").removePrefix("*").removePrefix("•").trim()
+            if (cleanLine.isNotBlank()) {
+                fragments.add(
+                    MemoryFragmentEntity(
+                        botId = botId,
+                        content = cleanLine,
+                        category = "DURUM",
+                        createdAt = now
+                    )
+                )
+            }
+        }
+
+        hafizaText.lines().map { it.trim() }.filter { it.isNotBlank() }.forEach { line ->
+            val cleanLine = line.removePrefix("-").removePrefix("*").removePrefix("•").trim()
+            if (cleanLine.isNotBlank()) {
+                fragments.add(
+                    MemoryFragmentEntity(
+                        botId = botId,
+                        content = cleanLine,
+                        category = "HAFIZA",
+                        createdAt = now
+                    )
+                )
+            }
+        }
+
+        if (fragments.isNotEmpty()) {
+            fragmentDao.insertFragments(fragments)
+        }
+
+        // Growth control: Limit to 200 items per botId
+        val count = fragmentDao.getFragmentCount(botId)
+        if (count > 200) {
+            fragmentDao.deleteOldestFragments(botId, count - 200)
+        }
+    }
+
+    private suspend fun migrateOldMemoryNotesToFragments(bot: BotEntity) {
+        if (fragmentDao.getFragmentCount(bot.id) == 0) {
+            val fragments = mutableListOf<MemoryFragmentEntity>()
+            val now = System.currentTimeMillis()
+
+            if (bot.storyNotes.isNotBlank()) {
+                bot.storyNotes.lines().map { it.trim() }.filter { it.isNotBlank() }.forEach { line ->
+                    val cleanLine = line.removePrefix("-").removePrefix("*").removePrefix("•").trim()
+                    if (cleanLine.isNotBlank()) {
+                        fragments.add(
+                            MemoryFragmentEntity(
+                                botId = bot.id,
+                                content = cleanLine,
+                                category = "DURUM",
+                                createdAt = now
+                            )
+                        )
+                    }
+                }
+            }
+
+            if (bot.memoryNotes.isNotBlank()) {
+                bot.memoryNotes.lines().map { it.trim() }.filter { it.isNotBlank() }.forEach { line ->
+                    val cleanLine = line.removePrefix("-").removePrefix("*").removePrefix("•").trim()
+                    if (cleanLine.isNotBlank()) {
+                        fragments.add(
+                            MemoryFragmentEntity(
+                                botId = bot.id,
+                                content = cleanLine,
+                                category = "HAFIZA",
+                                createdAt = now
+                            )
+                        )
+                    }
+                }
+            }
+
+            if (fragments.isNotEmpty()) {
+                fragmentDao.insertFragments(fragments)
+            }
+        }
+    }
+
+    suspend fun getRelevantMemoryFragments(bot: BotEntity, queryText: String): List<MemoryFragmentEntity> {
+        migrateOldMemoryNotesToFragments(bot)
+
+        val keywords = extractKeywords(queryText)
+        val results = mutableListOf<MemoryFragmentEntity>()
+
+        if (keywords.isNotEmpty()) {
+            // 1. Try FTS Search
+            try {
+                val ftsQuery = keywords.joinToString(" OR ")
+                val ftsMatches = fragmentDao.searchFragmentsFts(bot.id, ftsQuery, limit = 10)
+                results.addAll(ftsMatches)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
+            // 2. Fallback using SQL LIKE on keywords
+            if (results.size < 5) {
+                for (kw in keywords) {
+                    if (results.size >= 10) break
+                    val likeMatches = fragmentDao.searchFragmentsLike(bot.id, "%$kw%", limit = 10)
+                    for (m in likeMatches) {
+                        if (results.none { it.id == m.id }) {
+                            results.add(m)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Fallback/padding with most recent fragments if < 5 items found
+        if (results.size < 5) {
+            val recents = fragmentDao.getRecentFragments(bot.id, limit = 10)
+            for (r in recents) {
+                if (results.none { it.id == r.id }) {
+                    results.add(r)
+                }
+            }
+        }
+
+        return results.take(10)
+    }
+
     // --- Prompt & Memory Logic ---
 
-    fun buildSystemPrompt(bot: BotEntity, settings: UserSettingsEntity, includeStyleGuide: Boolean = true): String {
+    fun buildSystemPrompt(
+        bot: BotEntity,
+        settings: UserSettingsEntity,
+        includeStyleGuide: Boolean = true,
+        relevantFragments: List<MemoryFragmentEntity> = emptyList()
+    ): String {
         val pinnedBlock = if (bot.pinnedMemory.isNotBlank()) {
             "\n\n## Kalıcı hafıza (kullanıcının elle yazdığı, ASLA silinmeyen/özetlenmeyen notlar — bunlara mutlaka uy)\n${bot.pinnedMemory}"
         } else ""
 
-        val memoryBlock = if (bot.memoryNotes.isNotBlank()) {
-            "\n\n## Uzun vadeli hafıza (geçmiş sohbetlerden özet)\n${bot.memoryNotes}"
-        } else ""
+        val ragBlock = if (relevantFragments.isNotEmpty()) {
+            "\n\n## Alakalı Hafıza ve Olay Parçaları (Semantik/Anahtar Kelime Arama ile Bulunan Bağlam)\n" +
+                    relevantFragments.joinToString("\n") { "- [${it.category}] ${it.content}" }
+        } else {
+            val memoryBlock = if (bot.memoryNotes.isNotBlank()) {
+                "\n\n## Uzun vadeli hafıza (geçmiş sohbetlerden özet)\n${bot.memoryNotes}"
+            } else ""
 
-        val storyBlock = if (bot.storyNotes.isNotBlank()) {
-            "\n\n## Süregelen hikaye durumu\n${bot.storyNotes}"
-        } else ""
+            val storyBlock = if (bot.storyNotes.isNotBlank()) {
+                "\n\n## Süregelen hikaye durumu\n${bot.storyNotes}"
+            } else ""
+
+            "$storyBlock$memoryBlock"
+        }
 
         // +18 NSFW Policy & Active Filter Directives
         val isNsfwAllowed = settings.enableNsfw && bot.isNsfw
@@ -369,6 +535,56 @@ Durdu, ifadesi ciddileşti.
             "\n\n## PARANTEZ İÇİ YÖNLENDİRME / OOC (OUT OF CHARACTER) YÖNERGESİ:\n- Kullanıcının mesajında parantez içinde \"(...)\" veya \"[...]\" yazdığı ifadeler hikaye dışı (OOC / Meta Yönlendirme) talimatlar ve AI yönlendirmeleridir.\n- Örnek: \"(Ayla bu sırada kapıyı kilitlesin)\" veya \"(Sahneyi akşam vaktine taşıyalım)\" veya \"(Daha soğuk tepki ver)\".\n- Parantez içindeki bu talimatları SİSTEM VE YÖNERGE TALİMATI olarak algıla. Karakter diyalogunda \"neden parantez açtın\" veya \"tamam şöyle yapıyorum\" deme! Doğrudan talimatı sahneye, karaktere ve aksiyona dürüstçe uygula."
         } else ""
 
+        val emotionStateObj = EmotionState.fromJson(bot.emotionState)
+        val emotionPromptDirective = if (bot.mode == "universe") {
+            val worldAtm = WorldAtmosphere.fromJson(bot.worldAtmosphere)
+            val charEmotions = kotlinx.coroutines.runBlocking { emotionDao.getEmotionsForBot(bot.id) }
+            val charEmotionsBlock = if (charEmotions.isNotEmpty()) {
+                "\n\n## YAN KARAKTERLERİN DUYGU VE İLİŞKİ DURUMLARI\n" + charEmotions.joinToString("\n") { c ->
+                    val st = EmotionState.fromJson(c.emotionState)
+                    "- ${c.characterName}: Ruh Hali=${st.mood} (${st.intensity}/10), Yakınlık=${st.affection}/100, Güven=${st.trust}/100, Gerginlik=${st.tension}/100"
+                }
+            } else ""
+
+            """
+
+## DÜNYA VE SAHNE ATMOSFERİ
+Mevcut Atmosfer: ${worldAtm.mood} (Şiddet: ${worldAtm.intensity}/10)
+${if (worldAtm.currentEvent.isNotBlank()) "Gelişen Olay: ${worldAtm.currentEvent}" else ""}$charEmotionsBlock
+
+## DUYGU VE ATMOSFER GÜNCELLEME TALİMATI (KRİTİK - KULLANICIYA GÖZÜKMEYECEK)
+Her yanıtının EN SONUNA, kullanıcıya görünmeyecek şekilde şu formatta bir duygu güncellemesi eklemek ZORUNDASIN:
+[EMOTION_UPDATE]
+mood: <yeni ruh hali>
+intensity: <0-10>
+affection_delta: <-10 ile +10 arası, bu mesajdaki değişim>
+trust_delta: <-10 ile +10 arası>
+tension_delta: <-10 ile +10 arası>
+[/EMOTION_UPDATE]
+(Evren modundasın: sahnede konuşan her yan karakter için ayrı bir [CHARACTER_EMOTION: {isim}] bloğu da ekle, aynı formatla. Ayrıca sahne genelinde önemli bir değişim olduysa [WORLD_ATMOSPHERE] bloğu da ekle:
+[WORLD_ATMOSPHERE]
+mood: <yeni ortam atmosferi>
+intensity: <0-10>
+current_event: <kısa olay tanımı>
+[/WORLD_ATMOSPHERE])
+""".trimIndent()
+        } else {
+            """
+
+## ŞU ANKI DUYGUSAL DURUMUN: Ruh halin ${emotionStateObj.mood} (şiddet: ${emotionStateObj.intensity}/10). Kullanıcıya yakınlığın ${emotionStateObj.affection}/100, güvenin ${emotionStateObj.trust}/100, gerginliğin ${emotionStateObj.tension}/100. Yanıtını bu duygusal duruma UYGUN şekilde yaz — örneğin affection düşükse mesafeli/soğuk, tension yüksekse kısa/gergin, trust düşükse temkinli davran.
+
+## DUYGU GÜNCELLEME TALİMATI (KRİTİK - KULLANICIYA GÖZÜKMEYECEK)
+Her yanıtının EN SONUNA, kullanıcıya görünmeyecek şekilde şu formatta bir duygu güncellemesi eklemek ZORUNDASIN:
+[EMOTION_UPDATE]
+mood: <yeni ruh hali>
+intensity: <0-10>
+affection_delta: <-10 ile +10 arası, bu mesajdaki değişim>
+trust_delta: <-10 ile +10 arası>
+tension_delta: <-10 ile +10 arası>
+[/EMOTION_UPDATE]
+""".trimIndent()
+        }
+
         if (bot.mode == "universe") {
             val castList = parseKeyCharacters(bot.keyCharactersJson)
             val castBlock = if (castList.isNotEmpty()) {
@@ -378,11 +594,91 @@ Durdu, ifadesi ciddileşti.
                 "\n\nKURAL: Sahnede gerekirse yan karakterler oluşturabilirsin ama abartma — az sayıda kullan."
             }
 
-            return "Sen \"${bot.universeName}\" adlı kurgusal evrende geçen bir hikayenin anlatıcısı ve yönetmenisin. Kullanıcı tek bir karakteri ($userCharLabel) canlandırıyor; sen sahneyi, ortamı ve gerektiğinde diğer karakterleri yönetiyorsun.$pinnedBlock\n\n## Evren ve olay örgüsü\n${bot.scenario}$castBlock\n\n## Kullanıcının canlandırdığı karakter\n$userCharLabel${if (bot.userCharDesc.isNotBlank()) " — ${bot.userCharDesc}" else ""}\n\n$nsfwPolicy$lengthInstruction$styleGuide$storyBlock$memoryBlock$oocDirective$langDirective\n\n## Genel kurallar\n- Evrenin ve senaryonun dışına çıkma, tutarlılığını koru.\n- Sahneyi kullanıcı yerine bitirme.\n- Önceki sahnelerde kurduğun detayları hatırlıyormuş gibi kullan."
+            return "Sen \"${bot.universeName}\" adlı kurgusal evrende geçen bir hikayenin anlatıcısı ve yönetmenisin. Kullanıcı tek bir karakteri ($userCharLabel) canlandırıyor; sen sahneyi, ortamı ve gerektiğinde diğer karakterleri yönetiyorsun.$pinnedBlock\n\n## Evren ve olay örgüsü\n${bot.scenario}$castBlock\n\n## Kullanıcının canlandırdığı karakter\n$userCharLabel${if (bot.userCharDesc.isNotBlank()) " — ${bot.userCharDesc}" else ""}\n\n$nsfwPolicy$lengthInstruction$styleGuide$ragBlock$emotionPromptDirective$oocDirective$langDirective\n\n## Genel kurallar\n- Evrenin ve senaryonun dışına çıkma, tutarlılığını koru.\n- Sahneyi kullanıcı yerine bitirme.\n- Önceki sahnelerde kurduğun detayları hatırlıyormuş gibi kullan."
         }
 
         val aiName = bot.aiName.ifBlank { "Karakter" }
-        return "Sen \"$aiName\" adında bir karaktersin ve kullanıcıyla kişisel/samimi bir senaryoda etkileşim kuruyorsun.$pinnedBlock\n\n## Kişilik\n${bot.aiPersonality}\n\n## Bağlam\nİlişki / bağlam: ${bot.scenario}\n\n## Kullanıcının canlandırdığı karakter\n$userCharLabel${if (bot.userCharDesc.isNotBlank()) " — ${bot.userCharDesc}" else ""}\n\n$nsfwPolicy$lengthInstruction$styleGuide$storyBlock$memoryBlock$oocDirective$langDirective\n\n## Genel kurallar\n- Karakterinin ve senaryonun dışına çıkma, tutarlılığını koru.\n- Sahneyi kullanıcı yerine bitirme.\n- Önceki sahnelerde kurduğun detayları hatırlıyormuş gibi kullan."
+        return "Sen \"$aiName\" adında bir karaktersin ve kullanıcıyla kişisel/samimi bir senaryoda etkileşim kuruyorsun.$pinnedBlock\n\n## Kişilik\n${bot.aiPersonality}\n\n## Bağlam\nİlişki / bağlam: ${bot.scenario}\n\n## Kullanıcının canlandırdığı karakter\n$userCharLabel${if (bot.userCharDesc.isNotBlank()) " — ${bot.userCharDesc}" else ""}\n\n$nsfwPolicy$lengthInstruction$styleGuide$ragBlock$emotionPromptDirective$oocDirective$langDirective\n\n## Genel kurallar\n- Karakterinin ve senaryonun dışına çıkma, tutarlılığını koru.\n- Sahneyi kullanıcı yerine bitirme.\n- Önceki sahnelerde kurduğun detayları hatırlıyormuş gibi kullan."
+    }
+
+    suspend fun parseAndApplyEmotionUpdates(botId: String, rawResponse: String): String {
+        var cleanText = rawResponse
+        val bot = botDao.getBotById(botId) ?: return rawResponse
+
+        // 1. Process main bot [EMOTION_UPDATE]
+        val emotionRegex = Regex("(?s)\\[EMOTION_UPDATE\\](.*?)\\[/EMOTION_UPDATE\\]")
+        val emotionMatch = emotionRegex.find(rawResponse)
+        if (emotionMatch != null) {
+            val block = emotionMatch.groupValues[1]
+            val mood = Regex("mood:\\s*(.+)").find(block)?.groupValues?.get(1)?.trim()
+            val intensity = Regex("intensity:\\s*(\\d+)").find(block)?.groupValues?.get(1)?.toIntOrNull()
+            val affDelta = Regex("affection_delta:\\s*([+-]?\\d+)").find(block)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+            val trustDelta = Regex("trust_delta:\\s*([+-]?\\d+)").find(block)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+            val tensionDelta = Regex("tension_delta:\\s*([+-]?\\d+)").find(block)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+
+            val current = EmotionState.fromJson(bot.emotionState)
+            val updated = current.applyDeltas(mood, intensity, affDelta, trustDelta, tensionDelta)
+            val updatedBot = bot.copy(emotionState = updated.toJson(), updatedAt = System.currentTimeMillis())
+            botDao.insertOrUpdate(updatedBot)
+        }
+
+        // 2. Process [CHARACTER_EMOTION: Name]
+        val charRegex = Regex("(?s)\\[CHARACTER_EMOTION:\\s*(.*?)\\](.*?)\\[/CHARACTER_EMOTION\\]")
+        charRegex.findAll(rawResponse).forEach { match ->
+            val charName = match.groupValues[1].trim()
+            val block = match.groupValues[2]
+            if (charName.isNotBlank()) {
+                val mood = Regex("mood:\\s*(.+)").find(block)?.groupValues?.get(1)?.trim()
+                val intensity = Regex("intensity:\\s*(\\d+)").find(block)?.groupValues?.get(1)?.toIntOrNull()
+                val affDelta = Regex("affection_delta:\\s*([+-]?\\d+)").find(block)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                val trustDelta = Regex("trust_delta:\\s*([+-]?\\d+)").find(block)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                val tensionDelta = Regex("tension_delta:\\s*([+-]?\\d+)").find(block)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+
+                val existingEntity = emotionDao.getEmotionForCharacter(botId, charName)
+                val current = EmotionState.fromJson(existingEntity?.emotionState)
+                val updated = current.applyDeltas(mood, intensity, affDelta, trustDelta, tensionDelta)
+
+                val entityToSave = CharacterEmotionEntity(
+                    id = existingEntity?.id ?: 0,
+                    botId = botId,
+                    characterName = charName,
+                    emotionState = updated.toJson()
+                )
+                emotionDao.insertOrUpdate(entityToSave)
+            }
+        }
+
+        // 3. Process [WORLD_ATMOSPHERE]
+        val worldRegex = Regex("(?s)\\[WORLD_ATMOSPHERE\\](.*?)\\[/WORLD_ATMOSPHERE\\]")
+        val worldMatch = worldRegex.find(rawResponse)
+        if (worldMatch != null) {
+            val block = worldMatch.groupValues[1]
+            val mood = Regex("mood:\\s*(.+)").find(block)?.groupValues?.get(1)?.trim()
+            val intensity = Regex("intensity:\\s*(\\d+)").find(block)?.groupValues?.get(1)?.toIntOrNull()
+            val currentEvent = Regex("current_event:\\s*(.+)").find(block)?.groupValues?.get(1)?.trim()
+
+            val currentWorld = WorldAtmosphere.fromJson(bot.worldAtmosphere)
+            val updatedWorld = WorldAtmosphere(
+                mood = mood ?: currentWorld.mood,
+                intensity = intensity ?: currentWorld.intensity,
+                currentEvent = currentEvent ?: currentWorld.currentEvent
+            )
+            val currentLatestBot = botDao.getBotById(botId) ?: bot
+            botDao.insertOrUpdate(currentLatestBot.copy(worldAtmosphere = updatedWorld.toJson(), updatedAt = System.currentTimeMillis()))
+        }
+
+        // Clean all tags from response text
+        cleanText = cleanText
+            .replace(Regex("(?s)\\[EMOTION_UPDATE\\](.*?)\\[/EMOTION_UPDATE\\]"), "")
+            .replace(Regex("(?s)\\[CHARACTER_EMOTION:\\s*(.*?)\\](.*?)\\[/CHARACTER_EMOTION\\]"), "")
+            .replace(Regex("(?s)\\[WORLD_ATMOSPHERE\\](.*?)\\[/WORLD_ATMOSPHERE\\]"), "")
+            // Fallback trailing tag cleanup if tag wasn't closed properly
+            .replace(Regex("\\[EMOTION_UPDATE\\].*"), "")
+            .replace(Regex("\\[CHARACTER_EMOTION:.*\\]?.*"), "")
+            .replace(Regex("\\[WORLD_ATMOSPHERE\\].*"), "")
+            .trim()
+
+        return cleanText
     }
 
     // --- API Service Execution Engine ---
@@ -435,21 +731,47 @@ Durdu, ifadesi ciddileşti.
         val modelLimit = getModelContextLimit(modelName)
         val maxBudgetTokens = (modelLimit * 0.75).toInt().coerceAtMost(24_000)
 
-        val currentSysPrompt = buildSystemPrompt(bot, getOrCreateSettings())
+        val userQuery = messages.lastOrNull { it.role == "user" }?.text ?: ""
+        val relevantFragments = getRelevantMemoryFragments(bot, userQuery)
+        val currentSysPrompt = buildSystemPrompt(bot, getOrCreateSettings(), relevantFragments = relevantFragments)
         val currentTokens = estimateTotalTokens(currentSysPrompt, messages)
 
-        if (currentTokens > maxBudgetTokens || messages.size > 22) {
+        val isCriticallyFull = (currentTokens > maxBudgetTokens * 0.9) || (messages.size > 50)
+        val exceedsTriggerThreshold = messages.size > 22
+
+        if (isCriticallyFull) {
+            // Emergency synchronous summarization when context is >90% full or message count is very large
             val keepCount = 12
             val olderMessages = messages.dropLast(keepCount)
             val recentMessages = messages.takeLast(keepCount)
 
             if (olderMessages.isNotEmpty()) {
                 val updatedBot = summarizeAndArchiveOlderMessages(bot, olderMessages)
+                botDao.setNeedsSummarization(bot.id, false)
                 return Pair(updatedBot, recentMessages)
+            }
+        } else if (exceedsTriggerThreshold) {
+            // Mark needsSummarization flag for WorkManager background execution instead of blocking synchronously
+            if (!bot.needsSummarization) {
+                botDao.setNeedsSummarization(bot.id, true)
             }
         }
 
         return Pair(bot, messages)
+    }
+
+    suspend fun performBackgroundSummarization(botId: String) = withContext(Dispatchers.IO) {
+        val bot = botDao.getBotById(botId) ?: return@withContext
+        val messages = messageDao.getMessagesForBotList(botId)
+
+        if (messages.size > 14) {
+            val keepCount = 12
+            val olderMessages = messages.dropLast(keepCount)
+            if (olderMessages.isNotEmpty()) {
+                summarizeAndArchiveOlderMessages(bot, olderMessages)
+            }
+        }
+        botDao.setNeedsSummarization(botId, false)
     }
 
     private suspend fun summarizeAndArchiveOlderMessages(
@@ -485,6 +807,9 @@ Durdu, ifadesi ciddileşti.
 
                 val hafizaMatch = raw.split(Regex("HAFIZA:", RegexOption.IGNORE_CASE)).getOrNull(1)?.trim() ?: ""
 
+                // Save into memory_fragments table for RAG semantic search
+                saveMemoryFragmentsFromSummary(bot.id, durumMatch, hafizaMatch)
+
                 val newStory = listOf(bot.storyNotes, durumMatch).filter { it.isNotBlank() }.joinToString("\n")
                     .lines().takeLast(25).joinToString("\n")
 
@@ -494,6 +819,7 @@ Durdu, ifadesi ciddileşti.
                 updatedBot = bot.copy(
                     storyNotes = newStory,
                     memoryNotes = newMemory,
+                    needsSummarization = false,
                     updatedAt = System.currentTimeMillis()
                 )
                 botDao.insertOrUpdate(updatedBot)
@@ -515,11 +841,14 @@ Durdu, ifadesi ciddileşti.
                 }
                 val fallbackStorySnippet = "$localSummaryHeader\n$sampleOldMsgs"
 
+                saveMemoryFragmentsFromSummary(bot.id, fallbackStorySnippet, "")
+
                 val combinedStory = listOf(bot.storyNotes, fallbackStorySnippet).filter { it.isNotBlank() }
                     .joinToString("\n").lines().takeLast(25).joinToString("\n")
 
                 updatedBot = bot.copy(
                     storyNotes = combinedStory,
+                    needsSummarization = false,
                     updatedAt = System.currentTimeMillis()
                 )
                 botDao.insertOrUpdate(updatedBot)
@@ -816,14 +1145,18 @@ Durdu, ifadesi ciddileşti.
 
         // Context Window & Token Budget Management
         val (effectiveBot, effectiveMessages) = prepareContextAndSummarizeIfNeeded(bot, messages, selectedModel)
-        val systemPrompt = buildSystemPrompt(effectiveBot, settings)
+
+        // RAG: Retrieve relevant memory fragments based on latest user input
+        val userQuery = effectiveMessages.lastOrNull { it.role == "user" }?.text ?: ""
+        val relevantFragments = getRelevantMemoryFragments(effectiveBot, userQuery)
+        val systemPrompt = buildSystemPrompt(effectiveBot, settings, relevantFragments = relevantFragments)
 
         var primaryException: Exception? = null
         // Primary Execution
         try {
             val result = executeModelRequest(selectedModel, settings, systemPrompt, effectiveMessages, botId = effectiveBot.id)
             recordTokenUsage(effectiveBot.id, result.second.first, result.second.second)
-            return@withContext result.first
+            return@withContext parseAndApplyEmotionUpdates(effectiveBot.id, result.first)
         } catch (e: Exception) {
             if (!settings.enableAutoFallback) {
                 throw e
@@ -851,7 +1184,7 @@ Durdu, ifadesi ciddileşti.
             try {
                 val result = callGeminiApi(k, fallbackModel, systemPrompt, effectiveMessages)
                 recordTokenUsage(effectiveBot.id, result.second.first, result.second.second)
-                return@withContext result.first
+                return@withContext parseAndApplyEmotionUpdates(effectiveBot.id, result.first)
             } catch (err: Exception) {
                 fallbackErr = err
             }

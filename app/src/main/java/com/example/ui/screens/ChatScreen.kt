@@ -112,6 +112,7 @@ fun ChatScreen(
     isSending: Boolean,
     errorMessage: String?,
     keyCharacters: List<KeyCharacter>,
+    characterEmotions: List<com.example.data.local.CharacterEmotionEntity> = emptyList(),
     onBack: () -> Unit,
     onSendMessage: (String) -> Unit,
     onRegenerate: () -> Unit,
@@ -180,6 +181,8 @@ fun ChatScreen(
 
     val hue = MoodColors.getMoodHue(detectedMood)
     val moodLabel = MoodColors.getMoodLabel(detectedMood)
+    val emotionState = remember(bot.emotionState) { com.example.data.local.EmotionState.fromJson(bot.emotionState) }
+    val realMoodDisplay = "${emotionState.getMoodEmoji()} ${emotionState.mood.replaceFirstChar { it.uppercase() }}"
 
     val approxTokens = remember(bot.memoryNotes, bot.storyNotes, bot.pinnedMemory) {
         val chars = bot.memoryNotes.length + bot.storyNotes.length + bot.pinnedMemory.length
@@ -239,7 +242,7 @@ fun ChatScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = if (isSending) "yazıyor..." else moodLabel,
+                                text = if (isSending) "yazıyor..." else realMoodDisplay,
                                 color = EmochiTextSecondary,
                                 fontSize = 11.sp
                             )
@@ -285,9 +288,13 @@ fun ChatScreen(
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Memory, contentDescription = null, tint = EmochiTextMuted, modifier = Modifier.size(12.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("$approxTokens hafıza", color = EmochiTextMuted, fontSize = 11.sp)
+                        Text("❤️ ${emotionState.affection}%", color = Color(0xFFFF6B81), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("🛡️ ${emotionState.trust}%", color = Color(0xFF4D96FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        if (emotionState.tension > 20) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("⚡ ${emotionState.tension}%", color = Color(0xFFFFB302), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
 
@@ -749,6 +756,7 @@ fun ChatScreen(
         BotSettingsModal(
             bot = bot,
             keyCharacters = keyCharacters,
+            characterEmotions = characterEmotions,
             onDismiss = { showBotSettings = false },
             onSave = onSaveBotProfile,
             onResetChat = onResetChat,
@@ -762,6 +770,7 @@ fun ChatScreen(
         BotQuickProfileSheet(
             bot = bot,
             keyCharacters = keyCharacters,
+            characterEmotions = characterEmotions,
             onDismiss = { showQuickProfile = false },
             onSaveBot = { updatedBot ->
                 onSaveBotProfile(updatedBot, keyCharacters)
